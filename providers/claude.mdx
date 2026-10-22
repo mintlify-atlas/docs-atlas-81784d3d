@@ -1,7 +1,7 @@
 ---
 title: "Claude Provider: Run Harvey on Your Claude Subscription"
 sidebarTitle: "Claude"
-description: "Claude is Harvey's default brain. Uses your Claude Pro or Max subscription via the Claude CLI — safe-mode isolation, quota tracking, and zero per-token billing."
+description: "Harvey's default brain runs on your Claude Pro or Max subscription. CLI-driven with safe-mode isolation, quota throttling, and zero per-token API billing."
 ---
 
 Claude is Harvey's default brain. Instead of billing per token, Harvey drives the `claude` CLI under your existing Claude Pro or Max subscription. Every model call spends your plan, not a separate API key — so Harvey can run its full skills library for personalization and reply handling without racking up an incremental model bill.
@@ -82,6 +82,7 @@ Run `harvey usage` to see current quota gauges and per-agent token counts. No do
   - **`--setting-sources ""`** — no user, project, or local settings files.
   - **`--tools ""` and `--strict-mcp-config`** — no built-in tools, no MCP connectors.
   - **`--disable-slash-commands` and `--no-session-persistence`** — no skills, and nothing about the call is written to your Claude transcripts.
+  - **`--output-format json`** — structured JSON output for exact token and cost accounting per call.
   - A **fresh, empty temporary directory** as the working directory — never the Harvey checkout.
   - The **prompt on stdin**, never as a command-line argument (where other users on the system could read it via `ps`).
 

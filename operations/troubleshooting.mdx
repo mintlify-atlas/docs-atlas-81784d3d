@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting Harvey: Common Issues and Fixes"
 sidebarTitle: "Troubleshooting"
-description: "Solutions for the most common Harvey problems: installation errors, macOS Python issues, Claude and Codex authentication failures, dashboard access, and mail delivery."
+description: "Solutions for common Harvey problems: install errors, macOS Python issues, Claude and Codex auth failures, dashboard access, and mail delivery."
 ---
 
 Most Harvey issues fall into a handful of categories: installation environment, provider authentication, and mail configuration. The sections below cover every error that comes up repeatedly, with the exact fix for each one.
@@ -162,9 +162,10 @@ Every Codex error produces a log line that says exactly what to do. Match the me
 
 | Log message | What to do |
 |---|---|
+| `"Not logged in"` | Run `codex login` and choose "Sign in with ChatGPT". Harvey picks up the new login on its next heartbeat. |
 | `"expired or is due for renewal"` | Use Codex once yourself (it renews automatically) or run `codex login`. Harvey picks up the refreshed login on its next heartbeat. |
-| `"hasn't been verified with Harvey"` | Install the exact Codex version named in the message. Harvey only supports one version at a time: `npm install -g @openai/codex@0.159.3` |
-| `"isolation could not be verified"` | A Codex config layer outside `~/.codex` (for example `/etc/codex/config.toml` or a managed enterprise config) is forcing a tool, hook, MCP server, or custom endpoint back on. Harvey refuses to send prompts until that layer is removed or neutralised. |
+| `"Hasn't been verified with Harvey"` | Install the exact Codex version named in the message. Harvey only supports one version at a time: `npm install -g @openai/codex@0.159.3` |
+| `"Isolation could not be verified"` | A Codex config layer outside `~/.codex` (for example `/etc/codex/config.toml` or a managed enterprise config) is forcing a tool, hook, MCP server, or custom endpoint back on. Harvey refuses to send prompts until that layer is removed or neutralised. |
 | Model catalog errors | Choose an available model ID from the catalog shown in the message, or leave `brain.model` blank to let Harvey select a listed model automatically. |
 
 Harvey never falls back to Claude if Codex fails. A Codex-only setup stays on Codex.

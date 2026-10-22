@@ -1,5 +1,5 @@
 ---
-title: "Outbox: Review and Approve Outgoing Emails"
+title: "Outbox & Approval: Review Every Email Before It Sends"
 sidebarTitle: "Outbox & Approval"
 description: "Every outgoing email waits for your approval by default. Learn the outbox, keyboard shortcuts A/R/J/K, the pre-send gate, CLI commands, and autopilot mode."
 ---
@@ -43,11 +43,14 @@ Before any email leaves Harvey — regardless of whether it was individually app
 
 The gate rejects emails that contain any of the following:
 
+- **Empty subject or body** — an email with no subject line or no body text is blocked outright
 - **Unrendered merge tags** — any `{{first_name}}`, `{{company}}`, or similar variable that was never filled in
 - **Banned phrases** — spam triggers and AI tells (e.g. "I hope this finds you well", "game-changer", "click here", "limited time")
+- **Subject over 90 characters** — the hard subject-line length cap
 - **Body over the word ceiling** — the hard cap is 220 words; sequences aim far lower
 - **Too many links** — more than one URL in the body
 - **HTML markup** — Harvey sends plain text only; any `<div>`, `<table>`, `<img>`, or similar tag fails the check
+- **Postal address footer missing** — when `compliance.postal_address` is set, every cold sequence email must carry it (CAN-SPAM); if the footer was not appended, the send is blocked
 - **Non-deliverable addresses** — the recipient's `email_status` must be `verified` (or `risky` if you've opted in)
 - **Recipient/record mismatch** — the outbox `to_email` must exactly match the prospect's record in the database
 
@@ -69,7 +72,7 @@ With native mail providers (Gmail, Microsoft 365, SMTP), Email 1 is written per-
 
 For native providers, the Sender agent renders merge variables per prospect at the point each email is staged into the outbox. The replacements are:
 
-```
+```text
 {{first_name}}      → prospect's first name (or "there" for a company inbox)
 {{last_name}}       → prospect's last name
 {{company}}         → company name

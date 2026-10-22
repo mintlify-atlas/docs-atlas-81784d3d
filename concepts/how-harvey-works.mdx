@@ -29,16 +29,16 @@ The default heartbeat interval is 15 minutes. Change it with `heartbeat_interval
 Harvey chooses exactly one action per cycle by checking four counts in order:
 
 ```text
-handle replies  >  send campaigns  >  write campaigns  >  prospect  >  idle (analyze)
+handle replies  >  send campaigns  >  write campaigns  >  idle  >  prospect
 ```
 
 | Priority | Action | Condition |
 |----------|--------|-----------|
 | 1 | `handle_replies` | Any open conversation is waiting |
 | 2 | `send_campaign` | Draft campaigns are ready to deploy |
-| 3 | `write_campaign` | New prospects exist with no draft sequence |
-| 4 | `prospect` | Pipeline needs fresh leads |
-| 5 | `idle` | Nothing urgent — Analyst runs |
+| 3 | `write_campaign` | New prospects with writable email addresses exist and have no draft sequence |
+| 4 | `idle` | Unusable-email backlog detected (≥ 20 prospects with no verified/catch-all address in 24 h) — Analyst runs and Harvey pauses prospecting for the day |
+| 5 | `prospect` | Pipeline needs fresh leads |
 
 ## Why decisions are deterministic
 

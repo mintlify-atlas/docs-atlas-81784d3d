@@ -47,6 +47,12 @@ Always run `--estimate` before your first paid discovery run, especially for a n
     harvey discover --provider dataforseo_listings --city "Portland, OR"
     ```
     Runs a targeted listings search for Portland. The city is geocoded automatically and the result is cached permanently — Portland is only looked up once, ever.
+
+    To target **multiple cities** in one run, separate them with semicolons. Commas cannot be used as separators because city names already contain them:
+
+    ```bash
+    harvey discover --city "Denver, CO;Dallas, TX;Phoenix, AZ"
+    ```
   </Step>
   <Step title="Control depth, volume, and budget">
     ```bash
@@ -55,6 +61,40 @@ Always run `--estimate` before your first paid discovery run, especially for a n
     Caps results per query to 100, retrieves to depth 30 in search results, and stops the run if projected spend would exceed $2.00.
   </Step>
 </Steps>
+
+## All discover flags
+
+<ParamField query="--provider" type="string" default="osm">
+  Which source to query. One of `osm`, `dataforseo_listings`, `dataforseo_serp`, or `serper`. Run `harvey discover --providers` for a full menu with pricing.
+</ParamField>
+
+<ParamField query="--city" type="string">
+  One or more target cities as a **semicolon-separated** string, e.g. `"Denver, CO;Dallas, TX"`. Defaults to the `icp.geography` list in `harvey.yaml`. Use semicolons, not commas — city names already contain commas.
+</ParamField>
+
+<ParamField query="--depth" type="integer" default="30">
+  SERP depth: how many positions to retrieve per search. Ignored by listings providers. Keep at 20–30; depth 100 now costs 10x since Google removed 100-results-per-page in September 2025, and below rank 30 results are mostly directories anyway.
+</ParamField>
+
+<ParamField query="--limit" type="integer" default="100">
+  Maximum records to accept per query. For listings providers this bounds the number of businesses returned from a single API call.
+</ParamField>
+
+<ParamField query="--max-spend" type="float" default="1.00">
+  Hard spend cap in dollars. The run stops between batches if actual spend exceeds this value. Always runs the estimate first; exits immediately if the estimate already exceeds the cap.
+</ParamField>
+
+<ParamField query="--estimate" type="boolean">
+  Print the projected cost and exit without calling any API or spending anything. Run this before every paid discovery run.
+</ParamField>
+
+<ParamField query="--providers" type="boolean">
+  Print the provider menu with pricing and configuration status, then exit.
+</ParamField>
+
+<ParamField query="--no-profile" type="boolean">
+  Skip the automatic profile pass that normally runs immediately after discovery. Profiling is free (three HTTP requests per site, no model call), so there is rarely a reason to skip it — but this flag is useful when you want to defer profiling to a separate run or are running discovery in a batch context.
+</ParamField>
 
 ## Discovery providers in detail
 

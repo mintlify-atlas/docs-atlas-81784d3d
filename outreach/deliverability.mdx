@@ -38,7 +38,7 @@ Start at 10–20 emails per day per inbox and increase by about 5 per day. The `
 
 ### Watch your bounce rate
 
-Above roughly 3%, stop sending and fix list quality before continuing. Harvey monitors this for you and trips a global kill switch if your bounce rate crosses the configured `max_bounce_rate` threshold. A high bounce rate is almost always a list quality problem: unverified addresses, old data, or sending to catch-all domains without opt-in.
+`harvey warmup` flags your bounce rate as unhealthy above 3% (its internal reporting threshold). The global kill switch — which halts all sending automatically — trips at your configured `max_bounce_rate` (default 5%). A high bounce rate is almost always a list quality problem: unverified addresses, old data, or sending to catch-all domains without opt-in.
 
 </Steps>
 

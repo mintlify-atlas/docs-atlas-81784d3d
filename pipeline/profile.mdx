@@ -1,5 +1,5 @@
 ---
-title: "Profile Companies: Free HTTP Site Analysis"
+title: "Profile Companies: Free HTTP Site Analysis in Harvey"
 sidebarTitle: "Profile"
 description: "Three free HTTP requests per business extract ad pixels, tech stack, agency credits, schema gaps, blog age, and named contacts. No model call, no API cost."
 ---
@@ -74,8 +74,13 @@ That is all it takes. Profile picks up every company in the database that has no
 harvey profile --limit 200 --stale-days 90
 ```
 
-- `--limit 200` — process at most 200 companies in this run (default 100)
-- `--stale-days 90` — re-profile any company whose profile observations are older than 90 days (default 90)
+<ParamField query="--limit" type="integer" default="200">
+  Maximum number of companies to process in this run. Defaults to 200. Lower this if you want to profile a small batch before checking results.
+</ParamField>
+
+<ParamField query="--stale-days" type="integer" default="90">
+  Re-profile any company whose last profile check is older than this many days. Defaults to 90. Set to a lower value if your target market changes agencies or tech stack frequently.
+</ParamField>
 
 Re-profiling is safe to run at any time. Each company is marked as checked regardless of outcome — an unreachable site counts as checked, so the same handful of broken domains do not get retried every cycle instead of rotating through the backlog.
 

@@ -1,5 +1,5 @@
 ---
-title: "Configure Harvey: harvey.yaml and .env reference"
+title: "Harvey Configuration Reference: harvey.yaml and .env"
 sidebarTitle: "Configuration"
 description: "Complete reference for harvey.yaml sections (persona, product, ICP, channels, brain, compliance) and every .env credential variable Harvey reads."
 ---
@@ -42,6 +42,10 @@ persona:
 
 <ParamField body="tone" type="string">
   A comma-separated description of the writing style Harvey should adopt. Passed to the Writer and Handler agents. E.g. `"direct, conversational, brief"`.
+</ParamField>
+
+<ParamField body="linkedin" type="string">
+  Harvey's LinkedIn profile URL. Used in LinkedIn outreach messages. E.g. `"linkedin.com/in/harvey-yourcompany"`. Only relevant when `channels.linkedin.enabled: true`.
 </ParamField>
 
 ---
@@ -335,7 +339,7 @@ compliance:
 </ParamField>
 
 <ParamField body="precleared.enabled" type="boolean">
-  When `true`, Harvey checks each new recipient with Precleared before the first cold email. Anything other than `ok_to_email` holds the email in the Outbox with the reason shown. One check per address, cached for 30 days. Applies to the `gmail`, `microsoft`, and `smtp` providers.
+  When `true`, Harvey checks each new recipient with Precleared before the first cold email. Anything other than `ok_to_email` holds the email in the Outbox with the reason shown. One check per address, cached for 30 days. Applies to the `gmail` and `smtp` providers only.
 </ParamField>
 
 <ParamField body="precleared.sender_country" type="string">
@@ -362,11 +366,18 @@ Credentials only — never put these in `harvey.yaml`. The `.env` file is gitign
 | `SMTP_PORT` | If using SMTP | SMTP port, typically `587` (STARTTLS) |
 | `SMTP_USERNAME` | If using SMTP | SMTP login username (usually your full email address) |
 | `SMTP_PASSWORD` | If using SMTP | SMTP password or app-specific password |
+| `IMAP_HOST` | If using SMTP | IMAP server hostname for reading replies. Defaults to `SMTP_HOST` if not set. |
+| `IMAP_PORT` | If using SMTP | IMAP port, typically `993` (IMAPS). Defaults to `993`. |
+| `IMAP_USERNAME` | If using SMTP | IMAP login username. Defaults to `SMTP_USERNAME` if not set. |
+| `IMAP_PASSWORD` | If using SMTP | IMAP password. Defaults to `SMTP_PASSWORD` if not set. |
+| `INSTANTLY_API_KEY` | If using Instantly | API key from Instantly → Settings → Integrations → API Keys. Requires Instantly Growth plan or higher. |
 | `REOON_API_KEY` | Strongly recommended | Email verification — 600 checks/month free, renews monthly. Get it at [reoon.com](https://reoon.com/email-verifier) |
 | `ZEROBOUNCE_API_KEY` | Optional | Backup email verifier — 100 free/month. Better for Microsoft 365 and Google Workspace catch-all domains. |
 | `HUNTER_API_KEY` | Optional | Email pattern discovery — 25 domain searches/month free. Lets Harvey verify one address per company instead of guessing. |
+| `HUNTER_MONTHLY_SEARCHES` | Optional | Monthly domain-search allowance for Hunter.io. Default `25` (matches the free tier). Set to your plan's allowance if you have a paid Hunter subscription. |
 | `DATAFORSEO_LOGIN` | Optional | DataForSEO login email. Cheapest paid discovery source (~$0.37/1,000 businesses). $1 free credit on signup. |
 | `DATAFORSEO_PASSWORD` | Optional | DataForSEO API password (auto-generated in the dashboard — not your account password) |
+| `DATAFORSEO_SANDBOX` | Optional | Set to any value to route all DataForSEO calls to the free sandbox (real response shape, dummy data, never charged). Use this to try the integration before spending credits. |
 | `SERPER_API_KEY` | Optional | Serper.dev Google Search API — 2,500 queries free, no card required. Used for discovery and Scout searches. |
 | `PRECLEARED_API_KEY` | Optional | Per-recipient compliance checking — 10 checks/day free, 25/day with a free key. Required only when `compliance.precleared.enabled: true`. |
 | `LINKEDIN_EMAIL` | Optional | LinkedIn account email for browser-automation prospecting. See LinkedIn ToS warning. |

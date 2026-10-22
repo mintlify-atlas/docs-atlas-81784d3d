@@ -1,5 +1,5 @@
 ---
-title: "Reply Handling: Classifying Intent and Advancing Conversations"
+title: "Reply Handling: Intent Classification and Pipeline Stages"
 sidebarTitle: "Reply Handling"
 description: "The Handler agent polls for replies, classifies intent, advances conversation stages toward meetings, and manages bounces and opt-outs automatically."
 ---
@@ -61,14 +61,25 @@ The Handler also runs intent classification against the reply *without* the quot
 
 Harvey treats opt-outs as immediate, permanent, and non-negotiable. The following phrases trigger an `unsubscribe` classification regardless of what else the model says:
 
-- "no thanks" / "no thank you" (as a phrase, not a partial match)
-- "STOP" (when it's the entire substantive content of the reply)
+**Matched anywhere in the reply:**
+
 - "unsubscribe"
-- "remove me" / "take me off"
 - "opt out" / "opt-out"
+- "remove me" / "take me off"
 - "stop emailing" / "stop contacting" / "stop sending"
 - "do not contact" / "do not email"
+- "don't contact" / "don't email"
+- "never contact"
 - "delete my info" / "delete my data"
+- "no thanks" / "no thank you" (as a phrase, not a partial match; checked line-by-line)
+
+**When the reply's entire substantive content is one of these (bare replies such as a mobile one-tap):**
+
+- "STOP"
+- "unsubscribe"
+- "remove" / "remove me"
+- "opt out"
+- "no thanks" / "no thank you"
 
 When an opt-out is detected:
 
@@ -121,7 +132,7 @@ Only the sequence steps are cancelled. Approved replies drafted by the Handler s
 
 Every conversation Harvey tracks moves through a defined set of pipeline stages. These stages are not just email-tracking labels — they drive how the Handler drafts replies and what skills it loads for each response.
 
-```
+```text
 initial_outreach → engaged → qualifying → presenting → negotiating → closing → closed_won
                                                                              ↘ closed_lost
 ```

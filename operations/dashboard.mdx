@@ -1,7 +1,7 @@
 ---
 title: "Harvey Dashboard: Local Web UI at localhost:5555"
 sidebarTitle: "Dashboard"
-description: "Harvey's local web UI at 127.0.0.1:5555 — change mail settings, approve the outbox, start Harvey, and monitor the pipeline. Secured by token-based auth with three appearance modes."
+description: "Harvey's local web UI at 127.0.0.1:5555. Change mail settings, approve the outbox, start Harvey, and monitor the pipeline. Token-secured, loopback-only."
 ---
 
 The dashboard is a local web UI that runs at `127.0.0.1:5555`. From here you can change mail settings, approve the outbox, start Harvey, and watch the pipeline in real time. It is the control surface for everything Harvey does, but nothing in it can reach outside your machine without your say-so.
@@ -15,7 +15,7 @@ harvey dashboard --url    # reprints the link without restarting
 
 The printed link looks like:
 
-```
+```text
 http://127.0.0.1:5555/#token=<your-token>
 ```
 

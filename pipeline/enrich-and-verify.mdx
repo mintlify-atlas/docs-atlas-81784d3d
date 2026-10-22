@@ -20,11 +20,9 @@ Enrichment runs in priority order: free public sources first, falling back to pr
   <Step title="Fallback: general address from the homepage">
     When a company's site names no one and Harvey has no contact on record — common for small trades with no team page — it falls back to a general address the company prints on its own homepage or contact page.
 
-    Only four mailbox types qualify for this fallback:
-    - `owner@`
-    - `office@`
-    - `info@`
-    - `hello@`
+    Only addresses whose local part matches one of these well-known general inboxes are considered (in priority order):
+
+    `owner`, `office`, `info`, `contact`, `contactus`, `hello`, `team`, `service`, `sales`, `estimates`, `quotes`, `inquiries`, `enquiries`, `admin`, `support`
 
     These are never guessed. The address must actually appear on the page, and it is verified through the same pipeline as any named contact. Emails sent to these addresses greet the company's team rather than using a first name.
   </Step>
@@ -115,7 +113,7 @@ Enrichment and verification produce the contact-tier signals in Harvey's catalog
 
 All of these feed into the cohort builder. A typical campaign query might look like:
 
-```
+```text
 INCUMBENT_AGENCY is set  AND  RUNNING_GOOGLE_ADS = 1  AND  EMAIL_STATUS = verified
 → 14 companies ready to contact
 ```

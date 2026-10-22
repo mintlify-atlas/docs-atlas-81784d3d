@@ -1,7 +1,7 @@
 ---
-title: "SMTP Provider: Send Email via Any SMTP Server"
+title: "SMTP Provider: Send Cold Email via Any SMTP Mailbox"
 sidebarTitle: "SMTP"
-description: "Harvey's SMTP provider works with any outbound SMTP server and supports IMAP for reply polling — configure via .env variables and a single harvey.yaml setting."
+description: "Configure Harvey's SMTP provider for any outbound mail server. SMTP and IMAP credentials go in .env — no OAuth flow or client secrets needed."
 ---
 
 The SMTP provider works with any outbound mail server that speaks SMTP, including AgentMail, Fastmail, a Google Workspace account with an app password, or a self-hosted mail server. Unlike the Gmail and Microsoft 365 providers, SMTP needs no OAuth flow — just credentials in `.env`. IMAP is optional but required for reply detection: without it, Harvey can send but cannot read replies, stop sequences, honor opt-outs, or catch bounces.

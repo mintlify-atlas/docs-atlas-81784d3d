@@ -6,8 +6,6 @@ description: "Harvey supports Microsoft 365 and Exchange Online via the Microsof
 
 Harvey supports Microsoft 365 and Exchange Online via the Microsoft Graph API. Because Exchange Online no longer accepts passwords for IMAP in most tenants, Harvey signs in with OAuth (authorization code + PKCE) instead — no password is stored, no client secret is needed, and the refresh token is rotated on every use.
 
-For a full setup walkthrough including admin consent and tenant restrictions, see the [Microsoft 365 setup guide](https://github.com/ethanplusai/harvey/blob/main/docs/microsoft365.md).
-
 ## Required `.env` variables
 
 ```bash
@@ -85,7 +83,7 @@ Harvey requests the following **delegated** permissions. All four are required:
 
     A successful response looks like:
 
-    ```
+    ```text
     ✓ Connected as you@yourdomain.com
     ```
   </Step>
