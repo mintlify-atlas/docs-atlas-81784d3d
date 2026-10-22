@@ -1,0 +1,141 @@
+---
+title: "Reply Handling: Classifying Intent and Advancing Conversations"
+sidebarTitle: "Reply Handling"
+description: "The Handler agent polls for replies, classifies intent, advances conversation stages toward meetings, and manages bounces and opt-outs automatically."
+---
+
+When a prospect replies, Harvey's Handler agent takes over. It polls your mailbox, deduplicates incoming messages, classifies the intent of each reply, advances the conversation through its pipeline stage, and queues Harvey's response back through the same approval ladder as outgoing emails. The Handler runs on every heartbeat cycle before the Sender, which means a reply from this morning will be classified and acted on before any new outbound email goes out — and the queued follow-up sequence for that prospect is cancelled immediately.
+
+## What the Handler Does, Step by Step
+
+<Steps>
+
+### Poll for replies
+
+The Handler calls your configured mail provider (Gmail, Microsoft 365, SMTP) or Instantly to fetch inbound messages since the last cycle. For native providers, it separates bounce notifications from human replies before processing either.
+
+### Deduplicate
+
+Each inbound message is checked against a processed-replies log before anything else happens. If a message ID has already been handled — from a previous heartbeat or a provider returning the same message twice — it is skipped entirely. A reply is never classified or replied to more than once.
+
+### Classify intent
+
+The Handler runs two classification passes in sequence. First, a set of deterministic keyword checks runs in plain code — no model involved — and can override the model's output for certain categories. Then, for anything the keyword checks don't catch, the brain classifies the reply into one of eight intent labels.
+
+### Advance the conversation stage
+
+Based on the classified intent and the current stage of the conversation, the Handler moves the record forward in the pipeline. Each stage transition is logged and visible in the Conversations view of the dashboard.
+
+### Queue responses through the approval ladder
+
+For intents that get an automated reply (`interested`, `objection`, `question`, `wrong_person`), the Handler drafts a response and stages it in the outbox at `pending_review` (or `approved` if autopilot is on). The same keyboard shortcuts and CLI commands used for outbound emails work for replies.
+
+</Steps>
+
+## Intent Classification
+
+The Handler maps every reply to exactly one of eight intent labels:
+
+| Intent | What it means |
+|--------|--------------|
+| `interested` | Positive response; open to a call or next step |
+| `objection` | Has concerns but hasn't said no — price, timing, competition |
+| `not_interested` | A clear no or "we're all set" |
+| `unsubscribe` | Asks to be removed, stop contact, or opt out |
+| `escalate` | Angry, hostile, threatens legal action, or mentions compliance |
+| `ooo` | Out-of-office auto-reply |
+| `wrong_person` | Not the right contact; suggests someone else |
+| `question` | Asking for more information before deciding |
+
+Keyword checks run first and can override the model for `unsubscribe` and `escalate` — these two must never be missed. When in doubt between `not_interested` and `unsubscribe`, the classifier chooses `unsubscribe`. When in doubt between anything and `escalate`, it chooses `escalate`.
+
+## Handling Quoted Email
+
+When a prospect replies, their message often contains quoted text from Harvey's previous emails. The Handler sets all of Harvey's own previously sent text aside before running any analysis. It compares each line of the reply against everything Harvey has ever sent that prospect — email bodies, campaign templates, and every opt-out footer Harvey has used — and removes matching lines before classification.
+
+This means quoting Harvey's footer (which ends with something like *"Not interested? Reply 'no thanks' and I won't email again."*) does not count as an opt-out. The opt-out detection runs only against the text the prospect actually wrote.
+
+The Handler also runs intent classification against the reply *without* the quoted email — stripping quoted sections via standard quote markers — so a two-line reply buried below a quoted chain is classified on those two lines, not on the full thread.
+
+## Opt-Out Detection
+
+Harvey treats opt-outs as immediate, permanent, and non-negotiable. The following phrases trigger an `unsubscribe` classification regardless of what else the model says:
+
+- "no thanks" / "no thank you" (as a phrase, not a partial match)
+- "STOP" (when it's the entire substantive content of the reply)
+- "unsubscribe"
+- "remove me" / "take me off"
+- "opt out" / "opt-out"
+- "stop emailing" / "stop contacting" / "stop sending"
+- "do not contact" / "do not email"
+- "delete my info" / "delete my data"
+
+When an opt-out is detected:
+
+1. The conversation is closed and marked `closed_lost`
+2. The prospect's status is set to `opted_out`
+3. No reply is ever sent
+4. The prospect is permanently suppressed — no future outreach
+
+## Bounce Handling
+
+Bounce notifications from your mail provider are handled separately from human replies. When a bounce arrives:
+
+<Steps>
+
+### Mark the address invalid
+
+The bounced email address is updated in the database with status `invalid`. No future emails are ever sent to it.
+
+### Cancel queued sends
+
+Every pending outbox item for that prospect — any remaining sequence steps — is cancelled immediately. A single bounce stops the whole sequence.
+
+### Check the global bounce rate
+
+After each bounce, Harvey computes your total bounce rate across all sends. If the rate exceeds `max_bounce_rate` (default `0.05`, or 5%) and at least 10 emails have been sent, the global kill switch engages automatically.
+
+</Steps>
+
+The kill switch sets a `sending_paused` flag in Harvey's database that stops all outbound email until you manually resume. Resume with:
+
+```bash
+harvey sending resume
+```
+
+You can configure the threshold in `harvey.yaml`:
+
+```yaml
+channels:
+  email:
+    max_bounce_rate: 0.05   # 5% — the default; lower is safer
+```
+
+## Stop-on-Reply
+
+When any reply comes in from a prospect — regardless of intent — Harvey immediately cancels every pending sequence email queued for that prospect. This happens before intent classification, before the model is called, and before anything is stored. A human answered; a follow-up drip continuing over the top of their reply would be tone-deaf at best.
+
+Only the sequence steps are cancelled. Approved replies drafted by the Handler still go out on schedule.
+
+## Conversation Stages
+
+Every conversation Harvey tracks moves through a defined set of pipeline stages. These stages are not just email-tracking labels — they drive how the Handler drafts replies and what skills it loads for each response.
+
+```
+initial_outreach → engaged → qualifying → presenting → negotiating → closing → closed_won
+                                                                             ↘ closed_lost
+```
+
+Stage transitions are driven by intent and the content of the reply:
+
+- A reply classified as `interested` from `initial_outreach` → `engaged`
+- An interested reply mentioning scheduling, calendar, or a call from any stage → `closing`
+- A question from `engaged` → `qualifying`
+- Discussion of pricing or a demo request → `presenting`
+- An opt-out or `not_interested` → `closed_lost`
+
+The current stage for every conversation is visible in the dashboard under **Conversations**, along with the full reply thread and Harvey's classification for each message.
+
+<Tip>
+  To read the full conversation thread for any prospect — every message sent and received, Harvey's classifications, and the current pipeline stage — open the dashboard and go to **Conversations**. Click any conversation to expand the thread. You can also see which reply triggered each stage change and what Harvey drafted in response.
+</Tip>

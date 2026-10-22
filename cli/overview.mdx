@@ -1,0 +1,68 @@
+---
+title: "Harvey CLI Reference"
+sidebarTitle: "Overview"
+description: "Complete reference for all harvey CLI commands — install, run, discover, profile, signals, outbox, sending, export, train, and more."
+---
+
+The harvey CLI is the primary interface to every capability Harvey provides. There are no sub-applications or separate binaries — every major function is a subcommand of the single `harvey` entry point. Running `harvey` with no arguments prints a quick-start help block and exits cleanly; it never produces a traceback.
+
+## Quick reference
+
+| Command | What it does |
+|---|---|
+| `harvey install` | Install Python packages and Playwright browsers |
+| `harvey setup` | Run the interactive setup wizard |
+| `harvey run` | Start the heartbeat loop (the main event) |
+| `harvey train` | Crawl a website and write product knowledge to `skills/` |
+| `harvey dashboard` | Launch the local web dashboard at `127.0.0.1:5555` |
+| `harvey status` | Show a pipeline summary (prospects, drafts, campaigns, calls) |
+| `harvey usage` | Show the active provider's quota and per-agent token breakdown |
+| `harvey signals` | Review, confirm, or reject the 23-signal prospect catalog |
+| `harvey discover` | Find businesses matching your ICP |
+| `harvey profile` | Read discovered companies' websites (free, no model calls) |
+| `harvey outbox` | Review and approve queued outgoing emails |
+| `harvey sending` | Kill switch: pause, resume, or check sending state |
+| `harvey export` | Export deliverable prospects as a sequencer-ready CSV |
+| `harvey gmail` | One-time Gmail OAuth and connection test |
+| `harvey microsoft` | One-time Microsoft 365 sign-in and connection test |
+| `harvey warmup` | Check whether the sending domain is ready for cold email |
+| `harvey retry-writes` | Put prospects the Writer gave up on back in the queue |
+
+## Global behavior
+
+When called with **no subcommand**, `harvey` prints help and exits with code `0`. It never errors on a bare invocation.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Error (configuration problem, runtime failure, or `--check` failure) |
+| `130` | Interrupted by `Ctrl+C` |
+
+Configuration errors — missing keys, invalid values, a broken `harvey.yaml` — surface as a clean one-line message rather than a Python traceback. The error format is:
+
+```
+  Configuration problem:
+  <human-readable explanation>
+```
+
+## Explore by topic
+
+<CardGroup cols={2}>
+  <Card title="run / status" icon="play" href="/cli/run-and-status">
+    Heartbeat loop, pipeline summary, quota usage display, and the dashboard launcher
+  </Card>
+  <Card title="discover / profile" icon="magnifying-glass" href="/cli/discover-and-profile">
+    Find businesses with discovery providers, estimate costs, and profile their websites
+  </Card>
+  <Card title="signals" icon="signal" href="/cli/signals">
+    Confirm or reject the 23-signal prospect catalog from the terminal
+  </Card>
+  <Card title="outbox / sending" icon="envelope" href="/cli/outbox-and-sending">
+    Approve emails, manage the kill switch, check deliverability, and retry writes
+  </Card>
+  <Card title="train / export" icon="graduation-cap" href="/cli/train-and-export">
+    Train Harvey on a product website, export CSV, and configure email providers
+  </Card>
+</CardGroup>

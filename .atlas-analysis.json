@@ -1,0 +1,119 @@
+{
+  "projectType": "saas",
+  "projectName": "Harvey",
+  "projectDescription": "Autonomous AI sales agent that finds prospects, writes personalized cold email campaigns, handles replies, and books meetings — running on your Claude or Codex subscription with no per-token API billing.",
+  "theme": "luma",
+  "primaryColor": "#1A1A1A",
+  "lightColor": "#F5F4F2",
+  "darkColor": "#0F0F0F",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/how-harvey-works",
+              "concepts/signals",
+              "concepts/skills-library"
+            ]
+          },
+          {
+            "group": "Prospecting Pipeline",
+            "pages": [
+              "pipeline/discover",
+              "pipeline/profile",
+              "pipeline/enrich-and-verify"
+            ]
+          },
+          {
+            "group": "Email & Outreach",
+            "pages": [
+              "outreach/outbox-and-approval",
+              "outreach/reply-handling",
+              "outreach/deliverability"
+            ]
+          },
+          {
+            "group": "Providers & Integrations",
+            "pages": [
+              "providers/claude",
+              "providers/codex",
+              "providers/gmail",
+              "providers/microsoft365",
+              "providers/smtp"
+            ]
+          },
+          {
+            "group": "Dashboard & Operations",
+            "pages": [
+              "operations/dashboard",
+              "operations/legal-compliance",
+              "operations/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/overview",
+              "cli/run-and-status",
+              "cli/discover-and-profile",
+              "cli/signals",
+              "cli/outbox-and-sending",
+              "cli/train-and-export"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "No per-token API billing — runs on your Claude Pro/Max or ChatGPT subscription",
+    "23 configurable prospect signals (SERP rank, tech stack, ad pixels, agency detection, etc.)",
+    "Four-stage prospecting pipeline: Discover → Profile → Enrich → Verify",
+    "Personalized 3-email cold sequences written by an AI Writer agent",
+    "Outbox approval ladder — nothing sends without your review (unless you opt out)",
+    "Deterministic pre-send gate rejects unrendered merge tags, banned phrases, and bad addresses",
+    "Reply Handler classifies intent and advances conversation stages automatically",
+    "Web dashboard (localhost:5555) with Today queue, cohort builder, and outbox decisions desk",
+    "Editable skills library in plain Markdown — change prompts without touching code",
+    "Built-in CAN-SPAM compliance with postal address and opt-out footer enforcement",
+    "Subscription quota tracking and budget caps per provider",
+    "CSV export for any external sequencer (Instantly, Smartlead, etc.)"
+  ],
+  "publicApiSurface": [
+    "harvey install",
+    "harvey setup",
+    "harvey run",
+    "harvey train <url>",
+    "harvey dashboard",
+    "harvey status [--check]",
+    "harvey usage [--days N]",
+    "harvey signals [--confirm CODES] [--reject CODES]",
+    "harvey discover [--provider KEY] [--estimate] [--providers]",
+    "harvey profile [--limit N] [--stale-days N]",
+    "harvey outbox [--approve ID] [--approve-all] [--reject ID]",
+    "harvey sending pause|resume|status",
+    "harvey export [--out FILE] [--email-status ...] [--min-score N]",
+    "harvey gmail auth|test",
+    "harvey microsoft auth|test",
+    "harvey warmup [domain]",
+    "harvey retry-writes",
+    "harvey.yaml: persona, product, icp, channels, usage, brain, writer, compliance",
+    ".env: GMAIL_*, M365_*, SMTP_*, REOON_API_KEY, DATAFORSEO_*, SERPER_API_KEY, PRECLEARED_API_KEY"
+  ]
+}

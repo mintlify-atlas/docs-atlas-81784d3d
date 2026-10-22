@@ -1,0 +1,163 @@
+---
+title: "How Harvey Works: Heartbeat Loop and Sub-Agents"
+sidebarTitle: "How It Works"
+description: "Harvey wakes every 15 minutes, runs five specialized sub-agents in a deterministic heartbeat loop, and decides what to do without burning a model call."
+---
+
+Harvey is a loop of five sub-agents that wakes up every 15 minutes, looks at four numbers, decides what most needs doing, and does it. The decision is deterministic — derived from pipeline counts in plain code, not by asking a model — which means no subscription quota is burned before any real work begins. Each sub-agent loads only the skills it needs, runs, logs what it found, and goes back to sleep. The database accumulates observations. Deals move forward.
+
+## The heartbeat loop
+
+Every cycle follows the same path:
+
+```text
+                 ┌──────────────────────────────────────┐
+                 ↓                                      │
+   Wake  →  Quiet hours?  →  Budget OK?  →  Decide  →  Act  →  Log  →  Sleep
+                 │               │
+              (sleep)         (sleep)
+```
+
+Profile scanning and outbox draining ride along on **every** cycle regardless of the main decision, because they cost nothing against the model budget and have to happen on schedule.
+
+<Note>
+The default heartbeat interval is 15 minutes. Change it with `heartbeat_interval_minutes` in `harvey.yaml`. Quiet hours are respected — Harvey won't run during the hours you configure, and it polls on short chunks so a system sleep/wake cycle never leaves it silently stalled.
+</Note>
+
+## Decision priority order
+
+Harvey chooses exactly one action per cycle by checking four counts in order:
+
+```text
+handle replies  >  send campaigns  >  write campaigns  >  prospect  >  idle (analyze)
+```
+
+| Priority | Action | Condition |
+|----------|--------|-----------|
+| 1 | `handle_replies` | Any open conversation is waiting |
+| 2 | `send_campaign` | Draft campaigns are ready to deploy |
+| 3 | `write_campaign` | New prospects exist with no draft sequence |
+| 4 | `prospect` | Pipeline needs fresh leads |
+| 5 | `idle` | Nothing urgent — Analyst runs |
+
+## Why decisions are deterministic
+
+Asking a model "what should I do next?" would burn a subscription call on something fully derivable from four database counts. Harvey never does that. The priority logic lives in `harvey/main.py` as plain Python — auditable, instant, and free. The model is reserved for the parts that actually require judgment: scoring a prospect, writing an email, classifying a reply.
+
+This is the core reason Harvey can run all day on a subscription plan rather than per-token API billing. If it can be gotten deterministically, it is.
+
+## The budget and quota check
+
+Before acting, Harvey checks whether it can spend model calls at all:
+
+<Tabs>
+  <Tab title="Real quota (preferred)">
+    Harvey reads the active subscription's real utilization windows — Claude's `/usage` endpoint or Codex's ChatGPT-plan rate limits — and compares them against `max_daily_claude_percent` (the setting name predates Codex support; it applies to whichever provider is configured). If the worst utilization window is at or above the configured ceiling, Harvey sleeps for one hour and re-checks.
+  </Tab>
+  <Tab title="Call counter (fallback)">
+    When quota can't be read, Harvey falls back to its own daily call counter for the active provider. The dashboard and `harvey usage` show "Quota unavailable" so you know which signal is in use.
+  </Tab>
+</Tabs>
+
+The budget gate never shows dollar figures. You are on a subscription plan, not paying per token, and Harvey doesn't pretend otherwise.
+
+## The five sub-agents
+
+Harvey feels like one agent. Underneath it's five, each loaded with a different subset of the skills library.
+
+<CardGroup cols={2}>
+  <Card title="Scout" icon="radar">
+    Scores and personalizes what the collectors found. Python does all the searching, site-scraping, and email resolution — the model is called only where judgment is genuinely needed, which is what keeps the token cost manageable.
+  </Card>
+  <Card title="Writer" icon="pen-nib">
+    Generates 3-email sequences. Email 1 under 75 words, Email 2 under 75, Email 3 under 40. With a native mail provider, Email 1 is drafted per prospect from that company's own facts — not a merge-tag template.
+  </Card>
+  <Card title="Sender" icon="paper-plane">
+    Renders merge variables per prospect, stages emails into the outbox with scheduled send times, and drains due approved items with human-like pacing. Enforces the daily cap and stop-on-reply.
+  </Card>
+  <Card title="Handler" icon="reply">
+    Polls for replies, deduplicates them, classifies intent, advances the conversation stage, and queues responses through the same approval ladder. Detects bounces, marks addresses invalid, cancels queued sends, and trips the global kill switch past a bounce-rate threshold.
+  </Card>
+  <Card title="Analyst" icon="chart-line">
+    Runs on idle cycles. Pipeline stats, campaign performance, intent distribution, what's actually working. Writes insights to `data/analytics.json` with actionable remediation steps naming the exact file to edit.
+  </Card>
+</CardGroup>
+
+## Sub-agent skill assignments
+
+Each agent is loaded with only the skills it needs. The mapping is defined in `harvey/brain.py`; edit it to change which knowledge reaches which agent.
+
+| Skill | Scout | Writer | Handler | Sender | LinkedIn |
+|---|:-:|:-:|:-:|:-:|:-:|
+| `prospecting_tactics` | ● | | | | ● |
+| `lead_qualification` | ● | | | | |
+| `account_navigation` | ● | | | | |
+| `signal_playbook` | ● | ● | | | |
+| `email_frameworks` | | ● | | ● | |
+| `sales_methodology` | | ● | ● | | |
+| `offer_strategy` | | ● | ● | | |
+| `objection_handling` | | | ● | | |
+| `linkedin_outreach` | | | | | ● |
+| `product_knowledge` | ● | ● | ● | ● | ● |
+| `competitive_intel` | | ● | ● | | |
+
+## Conversation stages
+
+Handler advances each prospect through a defined stage sequence based on how they reply. Every stage transition is logged.
+
+```text
+initial_outreach → engaged → qualifying → presenting → negotiating → closing → closed_won
+                                                                              → closed_lost
+```
+
+<Accordion title="Stage transition rules">
+
+| Current stage | Intent | Next stage |
+|--------------|--------|-----------|
+| `initial_outreach` | `interested` | `engaged` |
+| `initial_outreach` | `question` | `engaged` |
+| `engaged` | `interested` (mentions pricing/demo) | `presenting` |
+| `engaged` | `interested` | `qualifying` |
+| `qualifying` / `presenting` | `interested` | `negotiating` |
+| `negotiating` | `interested` | `closing` |
+| Any | `interested` + meeting language | `closing` |
+| Any | `not_interested` | `closed_lost` |
+| Any | `unsubscribe` | `closed_lost` |
+| Any | `escalate` | unchanged (human decides) |
+
+</Accordion>
+
+## The pre-send gate
+
+Before any email leaves the outbox, a **deterministic pre-send gate** runs — no model involved. It rejects items that have:
+
+- Unrendered merge tags (any `{{variable}}` still in the text)
+- Banned phrases from `email_frameworks.md`
+- Body length over the cap
+- More than one link
+- An HTML body (cold email must be plain text)
+- A non-deliverable or unverified address
+- A mismatch between the recipient and the database record
+
+A gate rejection sets the outbox item to `failed` with the specific reason, so you can see exactly what was wrong. Nothing is silently dropped.
+
+## How the database is the asset
+
+Harvey stores data in SQLite at `data/harvey.db`. The schema is built around one idea:
+
+> **Every fact is a row, never a column.**
+
+```sql
+observations(
+  company_id, prospect_id, collector, signal_code,
+  value_num, value_text, confidence, evidence_url, observed_at, run_id
+)
+```
+
+This means:
+- **A new signal needs no migration.** A collector invents a code and it works.
+- **History is free.** The same signal observed quarterly is a time series — "they dropped their agency last quarter" is a far better trigger than any static column.
+- **Confidence and provenance travel with the fact.** "We think their agency is X, 0.9 confidence, here's the URL" — not just "agency = X".
+- **A cohort is a query.** Set intersection happens in SQL, not in application code.
+
+The signal vocabulary is governed: a database trigger rejects any `signal_code` not in the `signal_codes` table, so a typo fails loudly instead of quietly inventing a junk signal.

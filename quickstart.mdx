@@ -1,47 +1,273 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get started with Harvey"
+sidebarTitle: "Quickstart"
+description: "Install Harvey with Python 3.11+, configure .env with your mailbox credentials, train on your website, confirm signals, and start the heartbeat loop."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+Harvey installs as a standard Python package, reads two plain-text config files, and runs a single command. The steps below take you from a fresh clone to a live heartbeat loop. If you'd rather have Claude do the setup for you, jump to the [Claude Code easy path](#easiest-let-claude-set-it-up) at the bottom.
 
 ## Prerequisites
 
-Before you begin, you must have:
+Before you begin, make sure you have:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+- **Python 3.11 or newer** — check with `python3 --version`. macOS ships Python 3.9; if that's what you have, install a newer version first (see the note below).
+- An active **Claude Pro or Max** subscription with the CLI logged in (`claude login`), **or** a **ChatGPT plan with the Codex CLI** as an opt-in alternative.
+- A **mailbox to send from** — Gmail or Google Workspace is recommended, on a *dedicated secondary domain* (never your main domain). Microsoft 365 works too.
 
-## Get started
+<Note>
+**macOS Python 3.9 gotcha.** On macOS, `python3` and `python3 -m venv` both point to the system-installed Python 3.9. A virtualenv built from it silently fails to run Harvey because of `X | Y` type syntax added in Python 3.10. The install appears to succeed and the error surfaces later as an unrelated-looking `SyntaxError` or `ImportError`. Fix it before you start:
+
+```bash
+brew install python@3.13
+```
+
+Then use `python3.13` (not `python3`) everywhere in the steps below.
+</Note>
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+
+  <Step title="Clone the repo and install">
+
+    Clone Harvey from GitHub and create a virtual environment using Python 3.13 (or any 3.11+ version you have installed). The explicit `python3.13` is deliberate — `python3` on macOS resolves to the system 3.9.
 
     ```bash
-    npm install your-package
+    git clone https://github.com/ethanplusai/harvey.git
+    cd harvey
+
+    # Note: python3.13, not python3. On macOS, bare python3 is the system 3.9
+    # and a venv built from it cannot run Harvey.
+    python3.13 -m venv .venv && source .venv/bin/activate && pip install -e .
     ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+    Verify the install worked:
 
     ```bash
-    your-cli init
+    harvey --help
     ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+    If you see `command not found: harvey`, your virtualenv isn't active. Run `source .venv/bin/activate` first.
+
+    <Note>
+    **`ModuleNotFoundError` after install on macOS?** Python 3.13 silently ignores `.pth` files carrying the macOS hidden flag, which can break editable installs. Run `harvey install` again — it auto-detects and fixes this — or symlink manually:
 
     ```bash
-    your-cli start
+    ln -s "$(pwd)/harvey" .venv/lib/python3.13/site-packages/harvey
     ```
+    </Note>
+
   </Step>
+
+  <Step title="Configure your .env file">
+
+    Copy the example environment file and open it in your editor. Every variable is documented inline with exactly where to get it.
+
+    ```bash
+    cp .env.example .env
+    $EDITOR .env
+    ```
+
+    The only **required** variables are those for your chosen mail provider. Pick one and fill in its block:
+
+    **Option A — Gmail / Google Workspace (recommended for under 50 cold emails/day):**
+
+    ```bash
+    GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
+    GMAIL_CLIENT_SECRET=your-client-secret
+    ```
+
+    After filling those in, run the one-time OAuth flow:
+
+    ```bash
+    harvey gmail auth
+    ```
+
+    **Option B — Any SMTP + IMAP mailbox (Fastmail, AgentMail, Workspace app password):**
+
+    ```bash
+    SMTP_HOST=smtp.fastmail.com
+    SMTP_PORT=587
+    SMTP_USERNAME=you@yourdomain.com
+    SMTP_PASSWORD=your-app-password
+    ```
+
+    **Option B2 — Microsoft 365 / Outlook:**
+
+    ```bash
+    M365_CLIENT_ID=your-application-client-id
+    M365_TENANT_ID=your-directory-tenant-id
+    ```
+
+    Then run: `harvey microsoft auth`
+
+    Everything else in `.env` — discovery API keys, email verification keys, LinkedIn credentials — is optional. You can add them later as you scale.
+
+    <Tip>
+    Add a `REOON_API_KEY` (free tier: 600 verifications/month) so Harvey can verify email addresses before sending. Without a verification key, addresses are marked "guess" and Harvey will not send to them.
+    </Tip>
+
+  </Step>
+
+  <Step title="Train Harvey on your website">
+
+    Tell Harvey what you sell by pointing it at your company website. This writes a `harvey.local.yaml` file (gitignored) with your product description, benefits, pricing, and targeting — and generates `skills/product_knowledge.md` and `skills/competitive_intel.md`.
+
+    ```bash
+    harvey train https://your-company.com
+    ```
+
+    Re-running this command is safe — it updates the product and targeting fields while preserving any other settings you have made.
+
+    <Tip>
+    Using a ChatGPT plan with Codex instead of Claude? Pass the provider flag:
+
+    ```bash
+    harvey train https://your-company.com --provider codex --model gpt-5.5
+    ```
+    </Tip>
+
+  </Step>
+
+  <Step title="Confirm your prospecting signals">
+
+    Harvey knows how to collect 23 signals about a business — things like whether they're running Google Ads, who their incumbent marketing agency is, whether their blog has gone stale, or whether they have no website at all. **Nothing is collected until you say so.** On first run Harvey proposes the catalog; you confirm, skip, or reject each one.
+
+    The quickest way to start is to confirm everything that costs nothing (21 of the 23 signals):
+
+    ```bash
+    harvey signals --confirm free
+    ```
+
+    To review the full catalog in the terminal first:
+
+    ```bash
+    harvey signals
+    ```
+
+    Or open the dashboard (next step) and use the Signals tab — it shows plain-language descriptions, costs, and the number of companies already carrying each signal.
+
+    <Note>
+    Confirming signals is deliberately not skippable. Harvey prospects against nothing until at least one signal is confirmed. A prospect list you can't explain is a prospect list you shouldn't send to.
+    </Note>
+
+  </Step>
+
+  <Step title="Run your first discovery">
+
+    Find businesses matching your ICP. The default source is OpenStreetMap — free, no account needed, and a good way to try the whole pipeline before paying anyone.
+
+    ```bash
+    harvey discover
+    ```
+
+    Harvey always estimates cost before spending anything. To see the estimate and exit without running:
+
+    ```bash
+    harvey discover --estimate
+    ```
+
+    To see all available discovery providers with real prices:
+
+    ```bash
+    harvey discover --providers
+    ```
+
+    A typical first run looks like this:
+
+    ```
+    $ harvey discover
+
+      1 queries via OpenStreetMap (free)
+        - landscaping in Portland, OR
+
+      Estimated cost: $0.0000   (cap: $1.00)
+
+      Running...
+
+      DISCOVER — 41 results across 1 queries
+        41 new companies, 0 already known
+        3 filtered out as directories/aggregators
+        288 observations recorded
+        actual cost: $0.0000
+
+      PROFILE — 38 sites read, 231 observations  (free)
+
+      Next: harvey dashboard → Signals → cohort builder
+    ```
+
+    <Note>
+    **OpenStreetMap coverage is thin for service-area businesses.** OSM maps premises, so whole trades are barely present — fewer than 2,000 roofers and 2,300 plumbers in the entire US. Harvey says so in the UI rather than quietly under-delivering. For trades and contractors, use DataForSEO Business Listings (~$0.37/1,000 records, $1 free credit).
+    </Note>
+
+  </Step>
+
+  <Step title="Open the dashboard and start the loop">
+
+    Launch the local dashboard first — it gives you a visual view of everything Harvey found, lets you build cohorts, approve outbound email, and watch the activity feed in real time.
+
+    ```bash
+    harvey dashboard
+    ```
+
+    Harvey prints a private link like `http://127.0.0.1:5555/#token=…`. Open that exact link in your browser — the token in the URL is your authentication. A new tab without the link shows a locked screen.
+
+    In a second terminal window, start the heartbeat loop:
+
+    ```bash
+    harvey run
+    ```
+
+    You should see output like this:
+
+    ```
+    ============================================================
+    Harvey is online. Always Be Closing.
+    ============================================================
+    Checking pipeline state...
+    Decision: prospect (only 3 new prospects; pipeline needs leads)
+      discover  → 41 businesses in Portland, OR       ($0.00, OpenStreetMap)
+      profile   → 41 sites read, 288 observations     (free, no model calls)
+      scout     → 12 scored against your ICP
+    Decision: write_campaign (12 new prospects with no drafts)
+      writer    → 3-email sequence for Cascade Landscaping
+      outbox    → 12 emails waiting for your approval
+    Cycle complete. Sleeping for 15 minutes.
+    ```
+
+    By default, **every outgoing email waits for your approval** in the dashboard's Outbox tab. Work the queue with `A` to approve, `R` to reject, and `J`/`K` to move between items. Or from the terminal:
+
+    ```bash
+    harvey outbox            # review queued emails
+    harvey outbox --approve-all
+    ```
+
+    When you're ready to let Harvey run fully autonomously, set `require_approval: false` in `harvey.yaml` under `channels.email`.
+
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Easiest: let Claude set it up
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+If you have Claude Code, the repo ships a `CLAUDE.md` that turns it into the setup wizard. Clone the repo, open Claude Code, and just tell it what you want:
+
+```bash
+git clone https://github.com/ethanplusai/harvey.git
+cd harvey
+claude
+```
+
+Then say: **"set up Harvey for me"**
+
+Claude Code checks what state you're in, installs what's missing, asks what it needs, and trains Harvey on your product. No manual steps required.
+
+## What's next
+
+Once Harvey is running, check out:
+
+- **`harvey status`** — a summary of the current pipeline state
+- **`harvey usage`** — your active provider's quota and per-agent token counts
+- **`harvey warmup`** — checks SPF, DKIM, DMARC, domain age, blocklists, and your warmup progress before you start cold sending
+- **`harvey signals`** — review and update which signals Harvey prospects against
+- **`harvey export`** — export deliverable prospects as a sequencer-ready CSV
+
+To stop Harvey at any time: `Ctrl+C` in the terminal running `harvey run`, or `harvey sending pause` to stop outbound while leaving the loop running.

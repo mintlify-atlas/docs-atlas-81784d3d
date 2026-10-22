@@ -1,0 +1,138 @@
+---
+title: "Legal Compliance: CAN-SPAM, GDPR, and Deliverability Rules"
+sidebarTitle: "Legal & Compliance"
+description: "Harvey ships with compliant defaults for CAN-SPAM, GDPR/PECR, and bot disclosure. Covers opt-out handling, postal address requirements, Precleared per-recipient checks, and legitimate interest."
+---
+
+Harvey automates outreach, but **you are the sender.** Cold email is legal in most places when done right — and expensive when done wrong. Knowing the rules before you run your first campaign is not optional.
+
+<Warning>
+**CAN-SPAM penalties run to $53,088 per email.** That figure is per message, not per campaign. Harvey ships with compliant defaults. Keep them.
+</Warning>
+
+## CAN-SPAM (United States)
+
+CAN-SPAM applies to every commercial email sent to a US recipient, regardless of where you are. Harvey enforces the following by default:
+
+**Truthful subject line and accurate from-address.** Harvey's copywriting rules include a hard ban on fake `re:` threads and any form of sender impersonation. These are not style suggestions — violations are per-email federal penalties.
+
+**Working opt-out, honoured fast.** Every cold email Harvey sends ends with an opt-out line. The default wording is:
+
+```
+Not interested? Reply "no thanks" and I won't email again.
+```
+
+You can change the wording in `harvey.yaml`:
+
+```yaml
+compliance:
+  opt_out_line: 'Not interested? Reply "no thanks" and I won\'t email again.'
+```
+
+The line must ask for a reply Harvey recognises. Recognised opt-out phrases include: `no thanks`, `no thank you`, `STOP`, `unsubscribe`, `remove me`, and `opt out`. The line cannot contain a link or email address (that would be an opt-out mechanism Harvey can't monitor).
+
+Harvey treats any recognised phrase as **immediate and permanent**, wherever in the reply the person wrote it — including a bare `STOP` buried at the end of a long message.
+
+**Quoted email handling.** Harvey sets aside its own text when reading replies: its emails, campaign templates, and every footer it has ever sent are treated as quoted, not as the recipient's words. Quoting Harvey's own footer is therefore never mis-read as an opt-out. The model also reads replies without the quoted email included.
+
+**Physical mailing address in the footer.** Set your postal address in `harvey.yaml` before your first campaign:
+
+```yaml
+compliance:
+  postal_address: "123 Main St, City, ST 00000"
+```
+
+Harvey adds both the opt-out line and the postal address under every cold email it sends. It never adds them to replies (CAN-SPAM only requires them on initiating commercial messages). If the address is not set, `harvey run`, `harvey status`, and the Outbox tab all display a warning until you add it.
+
+## GDPR and PECR (EU and UK)
+
+<Note>
+GDPR and PECR do not prohibit B2B cold email — but they do require **defensible legitimate interest**. If you can't articulate why a specific person would care about your pitch, Harvey shouldn't email them, and its qualification rules say so.
+</Note>
+
+Three things legitimate interest requires:
+
+1. **The pitch must be genuinely relevant to that person's role.** "You run a landscaping company and I sell landscaping software" clears the bar. "I found your email address and thought you might be interested" does not.
+2. **You must know where the data came from.** Harvey records the source of every contact it finds. If you're using an external list, you need to know its provenance.
+3. **Objecting must be effortless.** Harvey's reply-based opt-out satisfies this for email. The one-reply unsubscribe is not just a CAN-SPAM requirement — it's also the clearest way to demonstrate that objecting is genuinely easy.
+
+## Precleared per-recipient check (optional)
+
+<Tip>
+**Precleared is the easiest way to add a per-recipient compliance check.** It handles the country-specific rules automatically and logs a signed receipt with every send.
+</Tip>
+
+Email law varies by recipient country. A UK sole trader needs explicit consent where a UK limited company does not. Germany requires prior consent for B2B email in most cases. Canada's CASL depends on whether the address was published. Rather than maintaining these rules yourself, you can delegate the check to [Precleared](https://precleared.dev).
+
+Enable it in `harvey.yaml`:
+
+```yaml
+compliance:
+  precleared:
+    enabled: true
+    sender_country: "US"
+    address_source: "scraped"
+    prospect_country: "US"   # optional; used when country can't be inferred
+```
+
+How it works:
+
+- Harvey checks each new recipient **before the first cold email**. Anything other than `ok_to_email` holds that email back.
+- The decision and the signed receipt ID are logged with every send, so you have a record.
+- **One check per address, cached for 30 days.** Changing `sender_country`, `address_source`, your product description, or `prospect_country` triggers a fresh check for everyone.
+- **Replies are never checked** — only outbound cold email.
+- **Native providers only** (Gmail and SMTP). Not supported with Instantly.
+
+Precleared receives: the recipient's email address, your `sender_country`, the `address_source`, your product description (from `harvey.yaml`), and `prospect_country` if set. It infers the recipient's country from the address domain, company records, or the company's website.
+
+**Rate limits:** 10 checks per day with no key. A free `PRECLEARED_API_KEY` raises the limit to 25. Add the key to your `.env` file.
+
+## Full compliance configuration snippet
+
+```yaml
+compliance:
+  postal_address: "123 Main St, City, ST 00000"
+  opt_out_line: 'Not interested? Reply "no thanks" and I won\'t email again.'
+  precleared:
+    enabled: true
+    sender_country: "US"
+    address_source: "scraped"
+```
+
+If you trained Harvey and have a `harvey.local.yaml`, put compliance settings there — that file wins over `harvey.yaml` and is gitignored, so your address and configuration never land in a public repository.
+
+## Bot disclosure
+
+Some jurisdictions require disclosing automated outreach. Harvey is instructed to answer truthfully, always, if a prospect asks whether they are talking to an AI. Do not configure it otherwise.
+
+## LinkedIn
+
+LinkedIn browser automation violates their Terms of Service and can result in the account being permanently restricted. LinkedIn outreach is off by default. If you enable it, use an account you can afford to lose — not your main professional profile.
+
+## Deliverability
+
+Sending from an unwarmed domain, or at volume on day one, results in permanent spam folder placement. Follow these steps before your first real campaign:
+
+<Steps>
+  <Step title="Buy a dedicated sending domain">
+    Use a domain variant (`getacme.com`, not `acme.com`). Never send cold email from your main business domain.
+  </Step>
+  <Step title="Set up SPF, DKIM, and DMARC">
+    All three are required. Without them, Gmail junks you outright. Run `harvey warmup` to check — it reads your DNS records, domain age, and blocklist status, then returns `READY` or `NOT READY`.
+  </Step>
+  <Step title="Warm up for 2–4 weeks">
+    Set `channels.email.warmup.start_date` in `harvey.yaml` and Harvey handles the ramp automatically: no cold email for `min_days`, then a daily cap that climbs by `daily_increase` per day. Replies always go out.
+  </Step>
+  <Step title="Ramp slowly">
+    10–20 emails per day per inbox to start, adding roughly 5 per day. The default `max_daily_sends: 50` is a ceiling, not a target.
+  </Step>
+  <Step title="Watch your bounce rate">
+    Above ~3%, stop and fix your list quality. Harvey trips its own kill switch past your configured `max_bounce_rate` threshold.
+  </Step>
+</Steps>
+
+If emails are landing in spam, the cause is almost always the domain — not the copy. Check SPF/DKIM/DMARC, confirm warmup ran, and halve your send volume before changing anything else.
+
+---
+
+*None of this is legal advice. If you send at scale or into regulated industries, talk to a lawyer who specialises in electronic communications law.*

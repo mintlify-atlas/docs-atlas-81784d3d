@@ -1,0 +1,94 @@
+---
+title: "Harvey: Autonomous AI Sales Agent"
+sidebarTitle: "Introduction"
+description: "Harvey is an autonomous sales agent that runs on your Claude or Codex subscription — no API key, no per-token billing, no expensive prospecting tools."
+---
+
+Harvey finds businesses worth selling to, learns something specific about each one, writes cold email that references it, sends it, reads the replies, and works the conversation toward a meeting. It runs on your machine, in a loop, on its own. The unusual part: **there is no model API bill.** Harvey uses your Claude Pro or Max subscription through Claude Code, or your ChatGPT subscription through Codex CLI. Model calls draw from the plan you already pay for — no API key, no per-token charges.
+
+## Why the subscription model matters
+
+Every other autonomous sales agent bills per token. That is the whole reason they cost what they cost: an agent that thinks in a loop, all day, is an agent that burns API credits in a loop, all day. Vendors solve this by thinking less — shorter prompts, cheaper models, fewer passes.
+
+Harvey uses the subscription-backed CLI for whichever provider you choose: `claude` for Claude Code, or an isolated `codex app-server` for Codex. Both return text with model tools disabled. Harvey handles all prospecting and mail operations itself — the model is reserved for the parts that genuinely require judgment.
+
+| What you need | Cost |
+|---|---|
+| Claude Pro/Max **or** a ChatGPT plan with Codex access | Your existing subscription |
+| Finding businesses | **$0** on the default source (OpenStreetMap), or ~$0.37 per 1,000 on the cheapest paid source |
+| Reading their websites | **$0** — three HTTP requests each, no model call |
+| Writing and sending | Your subscription + a mailbox (~$7/mo Google Workspace) |
+| Prospecting tools | **None.** No Apollo, no ZoomInfo, no Clearbit, no Clay. |
+
+For comparison, the tools Harvey replaces start at **$250–500/month** — and they are weakest precisely where Harvey is strongest: small local businesses with 5–50 people, where single-provider contact coverage caps out around 30% and micro-businesses are frequently absent entirely.
+
+Harvey also budgets itself. It reads the active provider's subscription quota and throttles to leave headroom for your own Claude or Codex work. Set `max_daily_claude_percent: 80` in `harvey.yaml` to reserve a portion of your plan for yourself.
+
+## What Harvey actually does
+
+Harvey runs a **heartbeat loop**: wake up, check the budget, decide what most needs doing, do it, log it, sleep. Every 15 minutes by default.
+
+### The heartbeat loop
+
+```text
+                 ┌──────────────────────────────────────┐
+                 ↓                                      │
+   Wake  →  Quiet hours?  →  Budget OK?  →  Decide  →  Act  →  Log  →  Sleep
+                 │               │
+              (sleep)         (sleep)
+```
+
+Harvey decides **deterministically**, not by asking a model what to do — that would burn a call on something derivable from four pipeline counts. The priority order is fixed:
+
+```text
+handle replies  >  send campaigns  >  write campaigns  >  prospect  >  idle (analyze)
+```
+
+Profiling and outbox draining ride along on every cycle regardless, because they cost nothing and have to happen on schedule.
+
+### The five sub-agents
+
+Underneath the single `harvey run` loop, five specialized agents run in sequence, each loaded with a different slice of the skills library.
+
+| Agent | What it does |
+|---|---|
+| **Scout** | Scores and personalizes what the collectors found. Python does the searching and email resolution; the model is used only where judgment is actually needed. |
+| **Writer** | Generates 3-email sequences. Email 1 under 75 words, email 2 under 75, email 3 under 40. Hard ban list on AI-sounding language. |
+| **Sender** | Renders merge variables per prospect, stages each email into the outbox with a send time, and drains due and approved items with human-like pacing. Enforces the daily cap and stop-on-reply. |
+| **Handler** | Polls for replies, deduplicates them, classifies intent, advances the conversation stage, and queues responses through the same approval ladder. Detects bounces, marks the address invalid, and trips a global kill switch past a bounce-rate threshold. |
+| **Analyst** | Runs on idle cycles. Pipeline stats, campaign performance, intent distribution, and what's actually working. |
+
+Conversation stages progress: `initial_outreach → engaged → qualifying → presenting → negotiating → closing → closed_won / closed_lost`
+
+## Key principles
+
+Harvey is built around a set of explicit operating principles that shape every design decision.
+
+**Autonomous doesn't mean unsupervised.** Quiet hours, spend caps, send limits, an approval queue, a deterministic pre-send gate, and a kill switch. Harvey asks before it spends and before it sends — until you tell it not to.
+
+**You decide what a good prospect is.** Harvey proposes signals; you confirm them. A prospect list you can't explain is a prospect list you shouldn't send to.
+
+**If it can be gotten deterministically, don't use a model.** Rank position, tech detection, junk filtering, the priority decision, the pre-send gate — all plain code. Claude or Codex is reserved for the parts that need judgment. That is why this runs on a subscription at all.
+
+**A failure is an observation, not silence.** "No team page found" is a finding. "Overpass is throttling" is a finding. Silent failures look exactly like clean results, which is how a broken run gets mistaken for an empty market.
+
+**The database is the asset, not the agent.** The initial list is worth little. The same signals observed over quarters — who changed agencies, who started spending on ads, who let their content go stale — is worth a great deal.
+
+**Everything is editable.** Prompts, skills, config, the dashboard. All plain text. You don't need to be a developer to change how Harvey sells.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install Harvey, point it at your website, and run your first discovery in under 10 minutes.
+  </Card>
+  <Card title="How Harvey Works" icon="circle-nodes" href="/concepts/how-harvey-works">
+    The heartbeat loop, the pipeline stages, and how the five sub-agents fit together.
+  </Card>
+  <Card title="Signals" icon="signal" href="/concepts/signals">
+    The 23 signals Harvey can collect about a business, what they cost, and how to confirm them.
+  </Card>
+  <Card title="Skills Library" icon="books" href="/concepts/skills-library">
+    The Markdown files that define how Harvey sells — and how to edit them to match your voice.
+  </Card>
+</CardGroup>

@@ -1,0 +1,90 @@
+---
+title: "harvey signals — Manage Prospect Signal Catalog"
+sidebarTitle: "signals"
+description: "Reference for confirming, rejecting, and reviewing the 23 prospect signals Harvey proposes — including free vs. paid signal categories and company counts."
+---
+
+Harvey knows how to collect 23 signals about a business. It collects **none of them** until you explicitly confirm which ones you want. On first run, `harvey signals` seeds the full catalog and shows everything in a proposed state — you then decide which signals are worth collecting for your ICP. This is not a skippable step: a fresh install prospects against nothing until at least one signal is confirmed.
+
+---
+
+## harvey signals
+
+`harvey signals` with no flags displays the full catalog grouped by category, with each signal's current status (`confirmed`, `proposed`, or `rejected`), its cost note, and the number of companies already carrying that signal in your database.
+
+With `--confirm` or `--reject`, it flips the status of one or more signals by code and exits.
+
+**Syntax**
+
+```bash
+harvey signals [--confirm CODES] [--reject CODES]
+```
+
+**Flags**
+
+<ParamField path="--confirm" type="string">
+  Comma-separated signal codes to confirm. Two special values are accepted in addition to individual codes:
+  - `all` — confirm every signal in the catalog
+  - `free` — confirm every signal whose cost note begins with "free" or "included" (currently 21 of the 23 signals)
+</ParamField>
+
+<ParamField path="--reject" type="string">
+  Comma-separated signal codes to turn off. Rejected signals are not collected on future runs. You can re-confirm them at any time.
+</ParamField>
+
+**Without flags — catalog review**
+
+Running `harvey signals` alone prints the full catalog:
+
+```
+  Signals — 21 confirmed, 2 awaiting you, 0 off
+  ==================================================================
+
+  DISCOVERY
+    [on]  SERP_RANK              Search rank (positions 11–30)
+          $0.0018 / search (DataForSEO SERP)
+    [on]  NO_WEBSITE             Has a listing but no site
+          free (OpenStreetMap / DataForSEO Listings)
+    [ ? ] UNCLAIMED_LISTING      Google Business Profile unclaimed
+          free (DataForSEO Listings)
+    …
+
+  PROFILE
+    [on]  INCUMBENT_AGENCY       Agency credited in footer
+          free (HTTP profiler)
+    …
+```
+
+Each row shows the signal code, a plain-language label, the current status mark (`[on]` / `[ ? ]` / `[off]`), and the cost note. When companies already carry the signal, a count is appended.
+
+**Examples**
+
+```bash
+# Review the full catalog
+harvey signals
+
+# Confirm everything that costs nothing (21 signals)
+harvey signals --confirm free
+
+# Confirm a paid signal explicitly
+harvey signals --confirm SERP_RANK
+
+# Confirm multiple signals at once
+harvey signals --confirm INCUMBENT_AGENCY,RUNNING_GOOGLE_ADS,NO_ONLINE_BOOKING
+
+# Turn off a signal
+harvey signals --reject LINKEDIN_CONNECT
+
+# Turn off several signals
+harvey signals --reject LINKEDIN_CONNECT,BLOCKS_AI_CRAWLERS
+```
+
+<Note>
+Nothing is collected until a signal is confirmed. A fresh install prospects against nothing by design — you decide what a good prospect looks like before Harvey goes looking.
+</Note>
+
+<Tip>
+Start with `harvey signals --confirm free` to confirm the 21 zero-cost signals in one command. You can then evaluate the two paid signals (`SERP_RANK` and any requiring an API key) separately with `--estimate` before committing to them.
+</Tip>
+
+The dashboard's **Signals** tab provides the same confirm/reject actions alongside signal descriptions, the cohort builder, and live company counts — useful for exploring what each signal actually means before committing to it.

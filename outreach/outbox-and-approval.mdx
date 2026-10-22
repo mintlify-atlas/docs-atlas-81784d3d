@@ -1,0 +1,115 @@
+---
+title: "Outbox: Review and Approve Outgoing Emails"
+sidebarTitle: "Outbox & Approval"
+description: "Every outgoing email waits for your approval by default. Learn the outbox, keyboard shortcuts A/R/J/K, the pre-send gate, CLI commands, and autopilot mode."
+---
+
+By default, every outgoing email Harvey generates waits in the outbox for your explicit approval before it leaves your inbox. Harvey is a copilot — it writes, schedules, and prepares; you decide what actually gets sent. This default exists because autonomous email is only as good as the human reviewing it, and the design of the approval interface is built to make that review fast without letting it become perfunctory.
+
+## The Dashboard Outbox
+
+The Outbox in Harvey's dashboard at `localhost:5555` is laid out as a decisions desk, not a list. One email fills the main pane at a time — subject, body, recipient, and the signals that informed its writing are all visible. The remaining queued emails wait in a side rail. You work through the queue using keyboard shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `A` | Approve the current email |
+| `R` | Reject the current email |
+| `J` | Move to the next email |
+| `K` | Move to the previous email |
+
+This one-at-a-time shape is deliberate. A wall of stacked draft rows with a single "Approve All" button at the top invites you to scan subjects and click once — which is exactly the shallow review the approval ladder exists to prevent. When only one email fills the pane, there is nothing else to look at.
+
+## CLI Outbox Commands
+
+You can review and manage the outbox entirely from the terminal without opening the dashboard:
+
+```bash
+# Open the interactive outbox review in your terminal
+harvey outbox
+
+# Approve a specific email by its outbox item ID
+harvey outbox --approve <id>
+
+# Approve everything currently queued
+harvey outbox --approve-all
+
+# Reject a specific email
+harvey outbox --reject <id>
+```
+
+## The Pre-Send Gate
+
+Before any email leaves Harvey — regardless of whether it was individually approved or approved in bulk — it passes a deterministic pre-send gate. This gate runs in plain Python with no model involved, and a single failure blocks the send entirely. It records the reason so you can see exactly what was caught.
+
+The gate rejects emails that contain any of the following:
+
+- **Unrendered merge tags** — any `{{first_name}}`, `{{company}}`, or similar variable that was never filled in
+- **Banned phrases** — spam triggers and AI tells (e.g. "I hope this finds you well", "game-changer", "click here", "limited time")
+- **Body over the word ceiling** — the hard cap is 220 words; sequences aim far lower
+- **Too many links** — more than one URL in the body
+- **HTML markup** — Harvey sends plain text only; any `<div>`, `<table>`, `<img>`, or similar tag fails the check
+- **Non-deliverable addresses** — the recipient's `email_status` must be `verified` (or `risky` if you've opted in)
+- **Recipient/record mismatch** — the outbox `to_email` must exactly match the prospect's record in the database
+
+The gate is a hard enforcement of the constraints Harvey's writer prompt asks for. Prompts can be ignored; the gate cannot.
+
+## Email Sequence Structure
+
+Harvey's Writer agent generates 3-email sequences with hard word-count limits enforced at write time and again at the gate:
+
+| Step | Content | Word limit | Delay |
+|------|---------|-----------|-------|
+| Email 1 | Cold observation + one question | Under 75 words | Sends immediately |
+| Email 2 | Follow-up, different angle, one proof point | Under 75 words | 3 days after Email 1 |
+| Email 3 | Break-up email, gracious not guilt-tripping | Under 40 words | 4 days after Email 2 |
+
+With native mail providers (Gmail, Microsoft 365, SMTP), Email 1 is written per-prospect from that company's actual signals and facts. Emails 2 and 3 use campaign-level merge templates rendered individually at send time.
+
+## Merge Variable Rendering
+
+For native providers, the Sender agent renders merge variables per prospect at the point each email is staged into the outbox. The replacements are:
+
+```
+{{first_name}}      → prospect's first name (or "there" for a company inbox)
+{{last_name}}       → prospect's last name
+{{company}}         → company name
+{{title}}           → prospect's job title
+{{personalization}} → research notes from the Scout agent
+```
+
+Any variable that remains unrendered — because the prospect record is missing a field — is caught by the pre-send gate's merge-tag check before the email can leave.
+
+## Human-Like Pacing
+
+Harvey does not send approved emails in a burst. Between each send, the Sender agent sleeps for a randomized interval (4–15 seconds by default). Combined with a per-cycle cap of 8 sends and the `max_daily_sends` ceiling, this spreads volume naturally through the day rather than hammering your sending domain with a sudden spike that looks like automation to mailbox providers.
+
+## The Humanizer Pass
+
+If you set `writer.humanizer: true` in your `harvey.yaml`, Harvey adds an extra editing pass after each draft is written. The humanizer reads your installed Claude Code skill at `~/.claude/skills/humanizer/SKILL.md` and asks the model to revise the draft to match it.
+
+```yaml
+writer:
+  humanizer: true
+```
+
+The humanizer fails open: if the skill file is missing, the model call fails, or the rewrite breaks any rule (lost a merge variable, added an em dash, grew more than two words longer, returned meta-text), the original draft is kept unchanged. Every draft still passes the pre-send gate after the humanizer runs.
+
+## Turning Off Approval: Autopilot Mode
+
+When you are confident in Harvey's output — after reviewing a few dozen emails and seeing consistent quality — you can remove the approval step entirely:
+
+```yaml
+channels:
+  email:
+    require_approval: false
+```
+
+With this set, outbox items are staged as `approved` rather than `pending_review` and drain on the next heartbeat without any action from you.
+
+<Note>
+  Only switch to autopilot after you have reviewed enough of Harvey's output to trust it for your product, your tone, and your prospects. The approval queue costs a few minutes per cycle; a bad batch sent on autopilot costs your sending domain's reputation.
+</Note>
+
+<Warning>
+  **Instantly users:** the local outbox cannot approve individual Instantly sends, because Instantly owns campaign scheduling and sends directly. With `require_approval: true` (the default), Harvey holds campaign deployment — including activation retries — and routes any replies to a human for manual response. If you want Instantly to send automatically, you must set `require_approval: false` explicitly. Note that this setting does not pause campaigns already running inside Instantly; manage those from the Instantly dashboard directly. For outbox approval to work per-message, use a native mail provider: Gmail, Microsoft 365, or SMTP.
+</Warning>

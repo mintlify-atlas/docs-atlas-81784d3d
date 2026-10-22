@@ -1,72 +1,96 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "Harvey",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "primary": "#1A1A1A",
+    "light": "#F5F4F2",
+    "dark": "#0F0F0F"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/ethanplusai/harvey"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/ethanplusai/harvey"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/how-harvey-works",
+              "concepts/signals",
+              "concepts/skills-library"
+            ]
+          },
+          {
+            "group": "Prospecting Pipeline",
+            "pages": [
+              "pipeline/discover",
+              "pipeline/profile",
+              "pipeline/enrich-and-verify"
+            ]
+          },
+          {
+            "group": "Email & Outreach",
+            "pages": [
+              "outreach/outbox-and-approval",
+              "outreach/reply-handling",
+              "outreach/deliverability"
+            ]
+          },
+          {
+            "group": "Providers & Integrations",
+            "pages": [
+              "providers/claude",
+              "providers/codex",
+              "providers/gmail",
+              "providers/microsoft365",
+              "providers/smtp"
+            ]
+          },
+          {
+            "group": "Dashboard & Operations",
+            "pages": [
+              "operations/dashboard",
+              "operations/legal-compliance",
+              "operations/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/overview",
+              "cli/run-and-status",
+              "cli/discover-and-profile",
+              "cli/signals",
+              "cli/outbox-and-sending",
+              "cli/train-and-export"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

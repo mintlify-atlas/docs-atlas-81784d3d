@@ -1,0 +1,403 @@
+---
+title: "Configure Harvey: harvey.yaml and .env reference"
+sidebarTitle: "Configuration"
+description: "Complete reference for harvey.yaml sections (persona, product, ICP, channels, brain, compliance) and every .env credential variable Harvey reads."
+---
+
+Harvey is configured through two plain-text files that live at the root of the project. Neither requires a restart to take effect — the heartbeat loop reads config on every cycle. `.env` holds credentials (API keys, OAuth secrets, passwords) and is gitignored. `harvey.yaml` holds everything else: who Harvey is, what it sells, who it targets, and how it behaves. Both files ship with documented examples you can edit in place.
+
+## harvey.yaml
+
+The main configuration file. `harvey train <url>` writes the `persona`, `product`, and `icp` sections for you by crawling your website. You can edit any section by hand at any time.
+
+### persona
+
+The identity Harvey uses in every email and conversation.
+
+```yaml
+persona:
+  name: "Harvey"
+  company: "Your Company"
+  role: "Business Development"
+  email: "harvey@yourcompany.com"
+  linkedin: "linkedin.com/in/harvey-yourcompany"
+  tone: "professional, consultative, confident"
+```
+
+<ParamField body="name" type="string" required>
+  The sender name that appears in outgoing emails and LinkedIn messages.
+</ParamField>
+
+<ParamField body="company" type="string" required>
+  Your company name. Used in email copy and product descriptions.
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  Harvey's job title as it appears in signatures and introductions. E.g. `"Business Development"`, `"Account Executive"`.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The sending email address. Must match the mailbox configured in `channels.email`. Should be on a dedicated secondary domain, not your main company domain.
+</ParamField>
+
+<ParamField body="tone" type="string">
+  A comma-separated description of the writing style Harvey should adopt. Passed to the Writer and Handler agents. E.g. `"direct, conversational, brief"`.
+</ParamField>
+
+---
+
+### product
+
+What Harvey is selling. The Writer and Handler agents use this section to craft personalized emails and handle objections. `harvey train <url>` generates this from your website and writes it to `harvey.local.yaml`.
+
+```yaml
+product:
+  name: "Your Product"
+  description: "Describe what your product does and who it's for"
+  pricing: "Starting at $X/mo"
+  key_benefits:
+    - "Benefit 1"
+    - "Benefit 2"
+    - "Benefit 3"
+  objection_responses:
+    "too expensive": "I understand budget is important. Most of our clients see ROI within 30 days..."
+    "already have a solution": "That makes sense. Curious — what's the one thing you wish it did better?"
+    "not interested": "No worries at all. Mind if I ask what your current approach looks like?"
+  offer:
+    primary: ""                    # Main offer (e.g., "Monthly subscription starting at $99/mo")
+    entry: ""                      # Low-commitment entry (e.g., "14-day free trial", "Free audit")
+    goal: "book_call"              # book_call | start_trial | get_reply
+    booking_method: "calendar_link" # calendar_link | suggest_times | ask_preference
+    booking_url: ""                # Calendar link URL (when using calendar_link)
+    meeting_duration: "15 minutes"
+    meeting_owner: ""              # Name or role of whoever takes the meeting
+```
+
+<ParamField body="offer.goal" type="string">
+  The conversion goal for cold outreach. `book_call` is the default — Harvey's emails guide prospects toward scheduling a call. Other options: `start_trial`, `get_reply`.
+</ParamField>
+
+<ParamField body="offer.booking_method" type="string">
+  How Harvey proposes a meeting time. `calendar_link` drops the `booking_url` into the email; `suggest_times` has Harvey propose two or three slots; `ask_preference` asks the prospect how they'd like to connect.
+</ParamField>
+
+---
+
+### icp
+
+Your Ideal Customer Profile. Used by Scout to score prospects and by the cohort builder in the dashboard.
+
+```yaml
+icp:
+  industries:
+    - "SaaS"
+    - "Marketing Agency"
+  company_size: "10-200 employees"
+  titles:
+    - "VP Marketing"
+    - "Head of Growth"
+    - "CMO"
+    - "Director of Marketing"
+  geography:
+    - "United States"
+  hiring_signals: []
+  # geo_coordinates is used for radius-based discovery queries
+  # geo_coordinates:
+  #   - lat: 45.5051
+  #     lon: -122.6750
+  #     radius_km: 50
+  #     label: "Portland, OR"
+```
+
+<ParamField body="industries" type="string[]" required>
+  Industries Harvey should target. Used to filter discovery results and weight Scout's ICP scores.
+</ParamField>
+
+<ParamField body="titles" type="string[]" required>
+  Job titles of your target decision-makers. Harvey uses these to identify the right contact at each company.
+</ParamField>
+
+<ParamField body="company_size" type="string">
+  A human-readable range like `"10-200 employees"`. Guides Scout's scoring and the Writer's framing.
+</ParamField>
+
+<ParamField body="geography" type="string[]">
+  The geographic markets to prospect. Used to seed discovery queries. E.g. `["United States"]`, `["Portland, OR", "Seattle, WA"]`.
+</ParamField>
+
+<ParamField body="hiring_signals" type="string[]">
+  Job roles that signal a company is in-market right now. A company hiring a "Head of Growth" is likely shopping for growth tooling. Harvey scans careers pages and job boards for these. Empty means fall back to `titles`.
+</ParamField>
+
+<ParamField body="geo_coordinates" type="object[]">
+  Explicit latitude/longitude coordinates for radius-based discovery queries. When set, Harvey can run `radius_km`-radius searches from each point instead of relying on city-name geocoding. Geocoded city names are cached permanently; `geo_coordinates` skips that step entirely.
+</ParamField>
+
+---
+
+### channels.email
+
+Controls how Harvey sends email and manages the outbox. Set `channels.email.provider` to match the credentials you filled in `.env`.
+
+```yaml
+channels:
+  email:
+    enabled: true
+    provider: "gmail"          # gmail | microsoft | smtp | instantly
+    max_daily_sends: 50
+    require_approval: true
+    send_to_risky: false
+    max_bounce_rate: 0.05
+    warmup:
+      start_date: ""           # YYYY-MM-DD; blank = no ramp
+      min_days: 14
+      start_sends: 5
+      daily_increase: 3
+      dkim_selector: ""        # only if your provider uses a non-standard one
+```
+
+<ParamField body="provider" type="string" required>
+  The mail provider Harvey uses to send and poll for replies. Options: `gmail`, `microsoft`, `smtp`, `instantly`. Must match the credentials set in `.env`.
+</ParamField>
+
+<ParamField body="max_daily_sends" type="integer">
+  Hard ceiling on outgoing emails per day. Default `50`. This is a ceiling, not a target — Harvey ramps from much lower during warmup. During warmup, the effective limit is computed from `warmup.start_sends` and `warmup.daily_increase` regardless of this value.
+</ParamField>
+
+<ParamField body="require_approval" type="boolean">
+  When `true` (default), every outgoing email waits in the Outbox for your approval before sending. Set to `false` for full autopilot. When using the `instantly` provider, `true` holds campaign deployment rather than individual emails.
+</ParamField>
+
+<ParamField body="send_to_risky" type="boolean">
+  When `false` (default, safest), Harvey skips catch-all domains. When `true`, it sends to addresses marked `risky` (catch-all domain) as well as `verified` ones. Addresses marked `guess` or `invalid` are never sent to regardless of this setting.
+</ParamField>
+
+<ParamField body="max_bounce_rate" type="number">
+  The bounce rate threshold at which Harvey trips its sending kill switch. Default `0.05` (5%). Above this rate, all outbound stops until you investigate and resume with `harvey sending resume`.
+</ParamField>
+
+#### warmup sub-object
+
+Use `channels.email.warmup` when you're sending from a new domain. Harvey enforces a cold-email freeze for `min_days`, then ramps the daily send cap from `start_sends` by `daily_increase` each day until it reaches `max_daily_sends`. Reply emails are never held by warmup — only cold outreach.
+
+<ParamField body="warmup.start_date" type="string">
+  The date your warmup service started, in `YYYY-MM-DD` format. Leave blank to skip the warmup ramp entirely (only appropriate for an already-warmed domain). Check readiness at any time with `harvey warmup`.
+</ParamField>
+
+<ParamField body="warmup.min_days" type="integer">
+  Days after `start_date` during which no cold email is sent. Default `14`.
+</ParamField>
+
+<ParamField body="warmup.start_sends" type="integer">
+  The cold-email cap on the first day after the warmup freeze ends. Default `5`.
+</ParamField>
+
+<ParamField body="warmup.daily_increase" type="integer">
+  How many emails to add to the daily cap each day after warmup ends. Default `3`. At this rate, starting at 5 and adding 3/day, you reach 50/day after ~15 days.
+</ParamField>
+
+---
+
+### channels.linkedin
+
+LinkedIn outreach is **off by default** and requires an explicit opt-in. Browser automation violates LinkedIn's Terms of Service — use an account you can afford to lose.
+
+```yaml
+channels:
+  linkedin:
+    enabled: false             # must be true AND credentials set in .env
+    max_daily_connections: 20
+    max_daily_messages: 10
+```
+
+<ParamField body="enabled" type="boolean">
+  Must be explicitly set to `true` to activate LinkedIn. Credentials alone in `.env` do not enable it.
+</ParamField>
+
+<ParamField body="max_daily_connections" type="integer">
+  Maximum connection requests Harvey sends per day. Default `20`.
+</ParamField>
+
+<ParamField body="max_daily_messages" type="integer">
+  Maximum LinkedIn messages Harvey sends per day to existing connections. Default `10`.
+</ParamField>
+
+---
+
+### usage
+
+Controls how much of your subscription Harvey is allowed to use and when it runs.
+
+```yaml
+usage:
+  max_daily_claude_percent: 80
+  heartbeat_interval_minutes: 15
+  quiet_hours:
+    start: "22:00"
+    end: "07:00"
+    timezone: "America/New_York"
+```
+
+<ParamField body="max_daily_claude_percent" type="integer">
+  The percentage of your subscription's daily quota Harvey may consume. The remaining headroom is left for your own Claude or Codex work. Default `80`. Despite the name, this setting applies to whichever provider `brain.provider` is set to — the name predates Codex support. If the quota cannot be read, Harvey falls back to its own daily call budget.
+</ParamField>
+
+<ParamField body="heartbeat_interval_minutes" type="integer">
+  How long Harvey sleeps between cycles. Default `15` minutes. Shorter intervals are more responsive; longer intervals are more conservative with your subscription quota.
+</ParamField>
+
+<ParamField body="quiet_hours.start" type="string">
+  Time (HH:MM, 24-hour) when Harvey stops sending and prospecting. Default `"22:00"`.
+</ParamField>
+
+<ParamField body="quiet_hours.end" type="string">
+  Time (HH:MM, 24-hour) when Harvey resumes. Default `"07:00"`.
+</ParamField>
+
+<ParamField body="quiet_hours.timezone" type="string">
+  IANA timezone for quiet hours. Default `"America/New_York"`. E.g. `"America/Los_Angeles"`, `"Europe/London"`.
+</ParamField>
+
+---
+
+### brain *(optional)*
+
+Controls which AI provider and model Harvey thinks with. Claude Code is the default and requires no `brain` section at all.
+
+```yaml
+brain:
+  provider: codex              # claude (default) | codex
+  model: gpt-5.5               # exact model ID from your account's catalog
+  reasoning_effort: ""         # codex only: minimal | low | medium | high | xhigh
+```
+
+<ParamField body="provider" type="string">
+  Which subscription-backed CLI to use. `claude` (default) uses Claude Code. `codex` uses the Codex CLI on a ChatGPT plan. It's one or the other — Harvey never falls back from one to the other.
+</ParamField>
+
+<ParamField body="model" type="string">
+  The exact model ID to use. For Codex, this can be any model available in your account's catalog including Luna, Sol, and Terra models (e.g. `gpt-5.6-luna`, `gpt-6.1-sol`). Leave blank to let Harvey select the highest-priority listed model. For Claude, Harvey uses whichever model the CLI defaults to for your subscription tier.
+</ParamField>
+
+<ParamField body="reasoning_effort" type="string">
+  Codex only. Controls how much reasoning the model applies. Options: `minimal`, `low`, `medium`, `high`, `xhigh`. Leave blank for the model's default.
+</ParamField>
+
+<Note>
+Using Codex requires the Codex CLI version `0.159.3` exactly on macOS or Linux. Harvey refuses any other version — including newer ones — because a different Codex version can introduce tools Harvey's lockdown doesn't account for. Install with:
+
+```bash
+npm install -g @openai/codex@0.159.3
+codex login    # choose "Sign in with ChatGPT" — API-key logins are refused
+```
+</Note>
+
+---
+
+### writer *(optional)*
+
+```yaml
+writer:
+  humanizer: true
+```
+
+<ParamField body="humanizer" type="boolean">
+  When `true`, adds one extra editing pass per email batch using `~/.claude/skills/humanizer/SKILL.md` if that file exists. Intended for users who have written their own humanizer skill. Default: not set (no extra pass).
+</ParamField>
+
+---
+
+### compliance
+
+Controls CAN-SPAM footer content and optional per-recipient compliance checking via [Precleared](https://precleared.dev).
+
+```yaml
+compliance:
+  postal_address: ""
+  opt_out_line: 'Not interested? Reply "no thanks" and I won''t email again.'
+  precleared:
+    enabled: false
+    sender_country: ""          # GB or US: where your business is based
+    address_source: "unknown"   # published | bought | scraped | given | unknown
+    prospect_country: ""        # optional: e.g. US if all your prospects are in one country
+```
+
+<Warning>
+**CAN-SPAM requires a postal address on every cold email.** Set `compliance.postal_address` to a street address, PO box, or virtual mailbox where you receive mail before your first campaign. Until it's set, cold email still sends — but Harvey warns you on `harvey run`, `harvey status`, and the Outbox tab on every cycle.
+</Warning>
+
+<ParamField body="postal_address" type="string">
+  Your physical or virtual mailing address, appended to the footer of every cold email. Required by CAN-SPAM. E.g. `"123 Main St, Portland OR 97201"`.
+</ParamField>
+
+<ParamField body="opt_out_line" type="string">
+  The opt-out sentence Harvey appends to every cold email. Must ask for a reply Harvey recognises as an opt-out (`"no thanks"`, `"unsubscribe"`, `"STOP"`, `"remove me"`, `"opt out"`). Must not contain a link or email address. Any reply matching that wording is treated as an immediate and permanent opt-out.
+</ParamField>
+
+<ParamField body="precleared.enabled" type="boolean">
+  When `true`, Harvey checks each new recipient with Precleared before the first cold email. Anything other than `ok_to_email` holds the email in the Outbox with the reason shown. One check per address, cached for 30 days. Applies to the `gmail`, `microsoft`, and `smtp` providers.
+</ParamField>
+
+<ParamField body="precleared.sender_country" type="string">
+  Two-letter ISO country code for where your business is based. Used by Precleared to apply the right legal framework. E.g. `"US"`, `"GB"`.
+</ParamField>
+
+<ParamField body="precleared.address_source" type="string">
+  How you obtained each prospect's email address. Options: `published`, `bought`, `scraped`, `given`, `unknown`. Affects Precleared's analysis under GDPR and CASL.
+</ParamField>
+
+---
+
+## .env variable reference
+
+Credentials only — never put these in `harvey.yaml`. The `.env` file is gitignored. Copy `.env.example` to get started.
+
+| Variable | Required | Description |
+|---|---|---|
+| `GMAIL_CLIENT_ID` | If using Gmail | OAuth 2.0 client ID from Google Cloud Console → Credentials → Desktop app |
+| `GMAIL_CLIENT_SECRET` | If using Gmail | OAuth 2.0 client secret for the same credential |
+| `M365_CLIENT_ID` | If using Microsoft 365 | Application (client) ID from Entra → App registrations |
+| `M365_TENANT_ID` | If using Microsoft 365 | Directory (tenant) ID for your organization |
+| `SMTP_HOST` | If using SMTP | Your outbound SMTP server hostname |
+| `SMTP_PORT` | If using SMTP | SMTP port, typically `587` (STARTTLS) |
+| `SMTP_USERNAME` | If using SMTP | SMTP login username (usually your full email address) |
+| `SMTP_PASSWORD` | If using SMTP | SMTP password or app-specific password |
+| `REOON_API_KEY` | Strongly recommended | Email verification — 600 checks/month free, renews monthly. Get it at [reoon.com](https://reoon.com/email-verifier) |
+| `ZEROBOUNCE_API_KEY` | Optional | Backup email verifier — 100 free/month. Better for Microsoft 365 and Google Workspace catch-all domains. |
+| `HUNTER_API_KEY` | Optional | Email pattern discovery — 25 domain searches/month free. Lets Harvey verify one address per company instead of guessing. |
+| `DATAFORSEO_LOGIN` | Optional | DataForSEO login email. Cheapest paid discovery source (~$0.37/1,000 businesses). $1 free credit on signup. |
+| `DATAFORSEO_PASSWORD` | Optional | DataForSEO API password (auto-generated in the dashboard — not your account password) |
+| `SERPER_API_KEY` | Optional | Serper.dev Google Search API — 2,500 queries free, no card required. Used for discovery and Scout searches. |
+| `PRECLEARED_API_KEY` | Optional | Per-recipient compliance checking — 10 checks/day free, 25/day with a free key. Required only when `compliance.precleared.enabled: true`. |
+| `LINKEDIN_EMAIL` | Optional | LinkedIn account email for browser-automation prospecting. See LinkedIn ToS warning. |
+| `LINKEDIN_PASSWORD` | Optional | LinkedIn account password for browser-automation prospecting. |
+| `CLOUDFLARE_ACCOUNT_ID` | Optional | Enables JS-rendered crawling of your own site during `harvey train`. |
+| `CLOUDFLARE_API_TOKEN` | Optional | Cloudflare API token with "Browser Rendering: Edit" permission. |
+
+---
+
+## harvey.local.yaml
+
+Harvey loads `harvey.local.yaml` in addition to `harvey.yaml` when it exists, and **values in `harvey.local.yaml` always win**. It is gitignored.
+
+<Note>
+`harvey.local.yaml` is the recommended place for real product configuration. A fork can carry your actual positioning and pricing in `harvey.local.yaml` while the tracked `harvey.yaml` stays a template — nobody publishes their pricing and ICP by accident. The `harvey train` command writes here, not to `harvey.yaml`.
+</Note>
+
+The override applies at the key level within each section. You don't need to repeat the whole file — only the keys you want to change:
+
+```yaml
+# harvey.local.yaml — only your overrides
+persona:
+  email: "hey@acme.io"
+  tone: "direct, brief, no buzzwords"
+
+product:
+  name: "Acme Widget"
+  pricing: "Starts at $199/mo"
+
+compliance:
+  postal_address: "456 Oak Ave, Suite 100, Austin TX 78701"
+```
+
+When Harvey reads config, it deep-merges `harvey.yaml` and `harvey.local.yaml`, with `harvey.local.yaml` taking precedence for every key that appears in both. Keys present only in `harvey.yaml` are used as-is.

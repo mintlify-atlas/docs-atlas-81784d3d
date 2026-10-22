@@ -1,0 +1,127 @@
+---
+title: "Harvey Dashboard: Local Web UI at localhost:5555"
+sidebarTitle: "Dashboard"
+description: "Harvey's local web UI at 127.0.0.1:5555 — change mail settings, approve the outbox, start Harvey, and monitor the pipeline. Secured by token-based auth with three appearance modes."
+---
+
+The dashboard is a local web UI that runs at `127.0.0.1:5555`. From here you can change mail settings, approve the outbox, start Harvey, and watch the pipeline in real time. It is the control surface for everything Harvey does, but nothing in it can reach outside your machine without your say-so.
+
+## Starting the dashboard
+
+```bash
+harvey dashboard          # starts the server and prints the unlock link
+harvey dashboard --url    # reprints the link without restarting
+```
+
+The printed link looks like:
+
+```
+http://127.0.0.1:5555/#token=<your-token>
+```
+
+Open that exact link in your browser. The page reads the token from the fragment, stores it for that tab only, and removes it from the address bar. If you open a new tab without the link, the dashboard shows a locked screen — paste the token there, or run `harvey dashboard --url` to get the link again.
+
+## Token-based authentication
+
+The dashboard can change your mail settings and approve outgoing email, so it requires more than just being on your machine. On first start, Harvey creates a random token at `data/dashboard-token`. The file is owner-read-only (mode `0600` on macOS and Linux). The unlock link carries the token after the `#` fragment, which browsers never send to the server, so it stays out of logs.
+
+Key rules:
+
+- **One tab per link open.** The token is kept in `sessionStorage` for that tab only. A new tab without the link starts locked.
+- **Bearer header required for API access.** Every API request — from scripts, `curl`, or the UI itself — must include `Authorization: Bearer <token>`. Cookies and query strings are never accepted.
+- **Rotating the token.** Delete `data/dashboard-token` and restart the dashboard. A new token is generated and a new link is printed.
+
+<Note>
+On **Windows**, the token file inherits the permissions of the `data/` folder rather than POSIX file modes. Harvey doesn't apply `chmod`-style bits there; your user profile folder normally restricts access to you.
+</Note>
+
+## Security model
+
+Harvey's dashboard only ever listens on the loopback interface. The `--host` flag accepts `127.0.0.1`, `::1`, and `localhost` — nothing else. Any request whose `Host` header names anything other than a loopback address is refused before the token is even checked, which also blocks DNS rebinding attacks (a name pointed at `127.0.0.1` that isn't `localhost` is refused).
+
+Requests sent by other websites open in your browser are refused: if a request carries an `Origin` header, it must match `http://127.0.0.1` (or `http://localhost`, etc.) exactly. No CORS headers are ever sent, so cross-origin preflight requests fail. Mutations must carry `Content-Type: application/json`.
+
+<Warning>
+Do **not** expose port 5555 to a network interface, even on a private LAN. The dashboard has no remote-access mode, and opening the port bypasses the loopback restriction entirely.
+</Warning>
+
+## Accessing the dashboard remotely
+
+If you run Harvey on a remote machine (a VPS, home server, or cloud instance), use an SSH tunnel rather than exposing the port:
+
+```bash
+ssh -L 5555:127.0.0.1:5555 your-machine
+```
+
+Then open the printed link locally. The tunnel forwards your local port 5555 to port 5555 on the remote machine's loopback interface. The token check still applies, so you still need the link Harvey printed on the remote machine.
+
+<Note>
+SSH tunnelling is the only supported remote-access path. The dashboard was designed for it: no certificate to manage, no firewall rules to open, and the token handles identity.
+</Note>
+
+## Dashboard sections
+
+### Today
+
+An asymmetric two-column layout: anything waiting on a decision (signals to confirm, emails to approve, open conversations) fills the left column, with the activity feed below it. Pipeline figures, collector runs, and setup progress sit in a right-hand rail. The screen opens here rather than on a setup checklist because the question a returning user actually has is "is anything waiting on me?" Setup items in the rail disappear entirely once they're done.
+
+### Signals
+
+The confirmation gate and the cohort builder. Harvey proposes 23 signals; nothing is collected until you confirm each one. Once signals are confirmed, the cohort builder lets you combine them into a target set — pick what a good prospect *must have* and what *disqualifies* them, and it counts the matches live as you build the query.
+
+### Discover
+
+The provider menu with prices shown side by side, a projected-spend estimate, and a run button. Discovery is the only stage that costs money, so the UI always shows an estimate before anything is called. A kill switch stops a run cleanly between batches.
+
+### Companies / Contacts
+
+Every business Harvey found, with their profile observations and linked contacts. Filterable and available as a CSV export.
+
+### Outbox
+
+The decisions desk. One email fills the pane; the rest wait in a side rail. Work the queue with keyboard shortcuts:
+
+| Key | Action |
+|-----|--------|
+| `A` | Approve — email is queued to send |
+| `R` | Reject — draft is discarded |
+| `J` | Move to next email |
+| `K` | Move to previous email |
+
+Each draft shows the recipient's profile signals alongside the email so you can check its claims against the facts Harvey found. The compliance footer (opt-out line and postal address) is shown exactly as it will appear in the sent message.
+
+### Conversations
+
+Every reply and how Harvey handled it — intent classification, conversation stage, and the response Harvey drafted or sent.
+
+### Usage
+
+Claude or Codex quota gauges and per-agent token counts for the last 30 days, broken down by agent, task, and model. No dollar figures are shown: you're on a subscription, not per-token API billing, and the gauge reflects your plan's real rate-limit windows.
+
+## Design principles
+
+Three rules hold the interface together:
+
+**No colour in the chrome.** The background, navigation, and text are warm greyscale in both light and dark modes. The only coloured element on screen is status — if something has a hue, it means something (good, warn, bad, waiting, or done).
+
+**One status vocabulary.** Prospects, campaigns, conversations, outbox items, signals, and email deliverability all resolve to the same five tones, so "waiting on you" looks identical wherever it appears.
+
+**All figures monospaced and tabular.** Columns of numbers line up; a value changing doesn't shift the surrounding layout.
+
+## Appearance modes
+
+The dashboard has three appearance states, not two:
+
+| Mode | Behaviour |
+|------|-----------|
+| `auto` | Follows your OS light/dark preference (default) |
+| `light` | Always light |
+| `dark` | Always dark |
+
+`auto` is the default, so the dashboard matches the rest of your desktop until you deliberately pick a mode. Dark mode is not a separate design — it's the same layout re-tokenised with a dark palette.
+
+## Implementation
+
+The dashboard is plain HTML, CSS, and JavaScript served from `harvey/web/`. There is no build step, no bundler, and no framework. To change the appearance, edit `harvey/web/app.css` and reload the browser. Fonts are vendored in the same directory, so the dashboard renders correctly with the network off.
+
+The JSON API is served by FastAPI (`harvey/dashboard.py`). The `DashboardGuard` ASGI middleware (`harvey/dashboard_auth.py`) enforces the Host check, Origin check, and Bearer token on every non-public route before any handler runs.

@@ -1,0 +1,76 @@
+---
+title: "SMTP Provider: Send Email via Any SMTP Server"
+sidebarTitle: "SMTP"
+description: "Harvey's SMTP provider works with any outbound SMTP server and supports IMAP for reply polling — configure via .env variables and a single harvey.yaml setting."
+---
+
+The SMTP provider works with any outbound mail server that speaks SMTP, including AgentMail, Fastmail, a Google Workspace account with an app password, or a self-hosted mail server. Unlike the Gmail and Microsoft 365 providers, SMTP needs no OAuth flow — just credentials in `.env`. IMAP is optional but required for reply detection: without it, Harvey can send but cannot read replies, stop sequences, honor opt-outs, or catch bounces.
+
+<Note>
+  IMAP configuration is optional at the `.env` level — `IMAP_*` variables default to the `SMTP_*` values if left blank. However, **IMAP is required for Harvey to read replies**. Without it, Harvey can send email but will not detect responses, opt-outs, or bounces. For any real campaign, configure IMAP.
+</Note>
+
+## Required `.env` variables
+
+```bash
+# Outbound — required
+SMTP_HOST=
+SMTP_PORT=587          # 587 for STARTTLS (recommended), 465 for SSL
+SMTP_USERNAME=
+SMTP_PASSWORD=
+
+# Inbound reply polling — strongly recommended
+IMAP_HOST=             # defaults to SMTP_HOST if blank
+IMAP_PORT=993          # standard IMAP over SSL
+IMAP_USERNAME=         # defaults to SMTP_USERNAME if blank
+IMAP_PASSWORD=         # defaults to SMTP_PASSWORD if blank
+```
+
+**Port guidance:**
+- `587` — STARTTLS (the server upgrades a plain connection to TLS). Recommended for most providers.
+- `465` — Implicit SSL (TLS from the start). Required by some providers.
+
+If `IMAP_HOST`, `IMAP_USERNAME`, and `IMAP_PASSWORD` are left blank, they default to the SMTP equivalents. For providers where SMTP and IMAP share the same host and credentials (Fastmail, most managed inboxes), this means you only need the four `SMTP_*` variables.
+
+## harvey.yaml configuration
+
+```yaml
+channels:
+  email:
+    provider: smtp
+    max_daily_sends: 50
+    require_approval: true
+```
+
+No other changes are needed — Harvey reads all SMTP and IMAP settings from `.env`.
+
+## How it works
+
+Harvey sends each email using `aiosmtplib`, building a proper `Message-ID` header for bounce and reply matching. Replies are fetched by connecting to the IMAP inbox, searching for `UNSEEN` messages, and marking them seen after retrieval. Harvey never moves or deletes inbox messages.
+
+The IMAP connection uses IMAP4 over SSL (`IMAP4_SSL`). Port `993` is standard; some providers use a different port — check your provider's documentation if the default doesn't connect.
+
+## Compatibility with Precleared
+
+The SMTP provider is compatible with Harvey's optional per-recipient compliance check via [Precleared](https://precleared.dev). When `compliance.precleared.enabled: true` is set in `harvey.yaml`, Harvey checks each new recipient before the first cold email goes out. Only the native providers — `gmail`, `smtp`, and `microsoft` — support this check; the `instantly` provider does not.
+
+## Testing the connection
+
+There is no dedicated `harvey smtp test` command, but you can verify the connection end-to-end by checking that both SMTP and IMAP credentials are accepted:
+
+```bash
+harvey status
+```
+
+If the provider is misconfigured, the status output will show the mail provider as unavailable with a note about which credential is missing.
+
+## Common provider settings
+
+| Provider | SMTP host | SMTP port | IMAP host | IMAP port |
+|---|---|---|---|---|
+| **Fastmail** | `smtp.fastmail.com` | `587` | `imap.fastmail.com` | `993` |
+| **Google Workspace (app password)** | `smtp.gmail.com` | `587` | `imap.gmail.com` | `993` |
+| **AgentMail** | per your AgentMail dashboard | `587` | per your AgentMail dashboard | `993` |
+| **Self-hosted (Postfix/Dovecot)** | your server | `587` | your server | `993` |
+
+For Google Workspace with SMTP, you must use an **app password** (not your account password), and IMAP access must be enabled in your Google account settings. Consider using the dedicated [Gmail provider](/providers/gmail) instead — it uses the Gmail API, which is more reliable and doesn't require app passwords.

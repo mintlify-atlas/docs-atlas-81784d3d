@@ -1,0 +1,122 @@
+---
+title: "Email Deliverability: Domain Setup and Warmup Guide"
+sidebarTitle: "Deliverability"
+description: "Set up a dedicated sending domain, configure SPF/DKIM/DMARC, run the warmup ramp, and use harvey warmup to verify readiness before sending cold email."
+---
+
+Sending cold email from your main domain, or at any meaningful volume on day one of a new domain, does not land you in spam temporarily — it lands you there permanently. Inbox providers build sending reputation over months and use it to route mail. A brand-new domain blasting 200 emails on its first day looks indistinguishable from a freshly registered spam domain, because that is exactly what freshly registered spam domains do. The damage is not reversible by fixing your copy or your DNS records after the fact.
+
+<Warning>
+  Never send cold email from your primary business domain (`acme.com`). A tanked sending reputation on your main domain affects all of your company's email — support tickets, contracts, invoices — not just outreach. Buy a dedicated sending domain and build its reputation separately.
+</Warning>
+
+## The Five Deliverability Rules
+
+<Steps>
+
+### Buy a dedicated sending domain
+
+Register a sending domain that is clearly related to your company but separate from your main domain. Common patterns: `getacme.com`, `tryacme.com`, `useacme.com`, or `acme.io` when your main domain is `acme.com`. The domain must be at least 30 days old before you send cold email from it — new domains are distrusted by major inbox providers. Harvey's `harvey warmup` command checks domain age for you.
+
+### Set up SPF, DKIM, and DMARC
+
+All three records are required. Gmail and Yahoo have required DMARC for bulk senders since 2024, and without a valid SPF and DKIM your mail is either rejected outright or junked.
+
+- **SPF** — a TXT record at your domain root that lists which servers are allowed to send as you. Your mail provider's setup documentation gives you the exact record to add. Harvey checks for `+all` (which lets anyone send as you — a misconfiguration) and too many DNS lookups (which causes a permerror).
+- **DKIM** — a public key record at `<selector>._domainkey.<domain>` that lets receivers verify the email's signature. Your provider generates the key pair and gives you the DNS record. If you use a non-standard selector, set it in your Harvey config.
+- **DMARC** — a TXT record at `_dmarc.<domain>` that tells receivers what to do with mail that fails SPF or DKIM. Start with `p=none` while warming, then move to `p=quarantine` once your sending reports look clean.
+
+`harvey warmup` checks all three and tells you exactly what is missing or misconfigured.
+
+### Warm up for 2–4 weeks
+
+Before sending any cold email, run a warmup service (Google Workspace and Microsoft 365 accounts support inbox-to-inbox warmup tools) for a minimum of 14 days. Warmup builds sending history and positive engagement signals with major inbox providers before your real emails arrive. Harvey's warmup ramp (`channels.email.warmup`) enforces a no-cold-email period automatically once `start_date` is set.
+
+### Ramp slowly
+
+Start at 10–20 emails per day per inbox and increase by about 5 per day. The `max_daily_sends: 50` default in Harvey's config is a ceiling, not a target — plan to reach it over several weeks, not on day one. Harvey's warmup ramp manages this automatically by setting a per-day cold-email cap that climbs by `daily_increase` each day. Replies always go out regardless of the cold cap.
+
+### Watch your bounce rate
+
+Above roughly 3%, stop sending and fix list quality before continuing. Harvey monitors this for you and trips a global kill switch if your bounce rate crosses the configured `max_bounce_rate` threshold. A high bounce rate is almost always a list quality problem: unverified addresses, old data, or sending to catch-all domains without opt-in.
+
+</Steps>
+
+## Warmup Ramp Configuration
+
+Harvey's warmup ramp is configured under `channels.email.warmup` in `harvey.yaml`. Once `start_date` is set, Harvey enforces a no-cold-email period for `min_days` days, then caps cold emails at a volume that starts at `start_sends` and increases by `daily_increase` each day until it reaches `max_daily_sends`.
+
+```yaml
+channels:
+  email:
+    warmup:
+      start_date: "2025-01-15"   # YYYY-MM-DD — when your warmup service started
+      min_days: 14               # no cold email until this many days have passed
+      start_sends: 5             # cold emails allowed on day min_days
+      daily_increase: 3          # added to the cap each day after that
+      dkim_selector: ""          # only set this if your provider uses a non-standard selector
+```
+
+Replies are never subject to the cold cap — they always go out. Only new sequence emails are rate-limited by the warmup ramp.
+
+<Note>
+  If you are using Instantly as your mail provider, Harvey's warmup ramp does not apply. Instantly has its own warmup system and per-account daily sending limits. Configure warmup and volume directly inside Instantly, and use Instantly's native warmup tools. The `harvey warmup` command will note this when it runs against an Instantly configuration.
+</Note>
+
+## The `harvey warmup` Command
+
+Run `harvey warmup [domain]` at any time to get a full deliverability readiness report for your sending domain. If no domain is specified, Harvey reads it from your config.
+
+```bash
+harvey warmup getacme.com
+```
+
+The command checks four categories and ends with a single verdict:
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="shield-check">
+    Checks MX records (so replies and bounces have somewhere to go), SPF, DKIM, and DMARC. A missing or misconfigured record shows the exact DNS change needed.
+  </Card>
+  <Card title="Reputation" icon="chart-line">
+    Checks domain age via RDAP, domain blocklists (Spamhaus DBL, SURBL, URIBL), and IP blocklists if you are using SMTP with a known sending IP.
+  </Card>
+  <Card title="Warmup & Sending" icon="flame">
+    Checks your warmup ramp progress against your `start_date` and `min_days`, today's cold-email cap, and your current bounce rate from Harvey's own send history.
+  </Card>
+  <Card title="Verdict" icon="circle-check">
+    **READY** — all checks pass, no blocklist hits, warmup complete. **NOT READY** — one or more failures that must be fixed before sending. **READY WITH CAVEATS** — passes the critical checks but has warnings (young domain, `p=none` DMARC, etc.).
+  </Card>
+</CardGroup>
+
+`harvey warmup` reads only public DNS records and Harvey's local send history. It does not send any test emails and does not make any changes to your configuration.
+
+## The Bounce Kill Switch
+
+Harvey's global kill switch engages automatically when your bounce rate crosses `max_bounce_rate` and at least 10 emails have been sent (a sample smaller than that is too noisy to act on). When it engages, all outbound email stops — the Sender skips its drain cycle — until you manually investigate and resume.
+
+```yaml
+channels:
+  email:
+    max_bounce_rate: 0.05   # 5% — trips the kill switch above this rate
+```
+
+```bash
+# Stop all sending immediately (the kill switch, manually triggered)
+harvey sending pause
+
+# Resume after you've investigated and fixed the problem
+harvey sending resume
+```
+
+When the kill switch engages via high bounce rate, the reason is stored in Harvey's database and shown in `harvey status` and the dashboard. Fix the underlying list quality issue — remove unverified addresses, stop sending to catch-all domains, check that your email verification step is running — before resuming.
+
+## Tools Harvey Doesn't Replace
+
+`harvey warmup` checks what it can from public DNS and local data. Two things it cannot measure — because only mailbox providers have access to this data — are actual inbox placement rate and per-domain reputation signals.
+
+For those, use:
+
+- **[Google Postmaster Tools](https://postmaster.google.com)** — free tool from Google that shows your domain and IP reputation, spam rate, authentication pass rate, and delivery errors specifically for Gmail. Set it up on your sending domain before you start sending and check it weekly.
+- **[mail-tester.com](https://www.mail-tester.com)** — sends a one-off test email to a unique address and scores it on spam filters, DNS records, header integrity, and content. Useful for a quick sanity check before a new campaign.
+
+Neither of these replaces the core work of domain authentication, warmup, and list quality — but both give you signal that `harvey warmup` cannot.

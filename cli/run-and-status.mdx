@@ -1,0 +1,180 @@
+---
+title: "harvey run, status, usage, dashboard — Core Commands"
+sidebarTitle: "run / status"
+description: "Reference for the heartbeat loop, pipeline status summary, subscription quota display, and the local dashboard launcher with security notes."
+---
+
+These four commands cover Harvey's operational core: starting the agent loop, inspecting what it is doing, reading quota from the active subscription provider, and opening the browser dashboard. None of them require arguments; each has at most a handful of flags.
+
+---
+
+## harvey run
+
+`harvey run` starts Harvey's heartbeat loop. Every 15 minutes by default, Harvey wakes up, checks the budget, decides what most needs doing, acts, logs the result, and sleeps again. The cycle is:
+
+```
+handle replies  >  send campaigns  >  write campaigns  >  prospect  >  idle (analyze)
+```
+
+Profiling and outbox draining ride along on every cycle regardless, because they cost nothing and must happen on schedule.
+
+**Syntax**
+
+```bash
+harvey run
+```
+
+There are no flags. Stop the loop with `Ctrl+C` (exits with code `130`) or `harvey sending pause` to halt outbound while leaving the loop running.
+
+**Example output**
+
+```
+============================================================
+Harvey is online. Always Be Closing.
+============================================================
+Checking pipeline state...
+Decision: prospect (only 3 new prospects; pipeline needs leads)
+  discover  → 41 businesses in Portland, OR       ($0.00, OpenStreetMap)
+  profile   → 41 sites read, 288 observations     (free, no model calls)
+  scout     → 12 scored against your ICP
+Decision: write_campaign (12 new prospects with no drafts)
+  writer    → 3-email sequence for Cascade Landscaping
+  outbox    → 12 emails waiting for your approval
+Cycle complete. Sleeping for 15 minutes.
+```
+
+<Note>
+Harvey decides what to do deterministically from four pipeline counts — it does not spend a model call on the decision itself.
+</Note>
+
+---
+
+## harvey dashboard
+
+`harvey dashboard` launches the local web UI and prints a private unlock link. The dashboard lets you confirm signals, build cohorts, price discovery runs, approve outbox email, and read conversations.
+
+**Syntax**
+
+```bash
+harvey dashboard [--host HOST] [--port PORT] [--url]
+```
+
+**Flags**
+
+<ParamField path="--host" type="string" default="127.0.0.1">
+  Loopback address to listen on. Only loopback addresses (`127.0.0.1`, `::1`, `localhost`) are accepted — any other value is refused before the server starts.
+</ParamField>
+
+<ParamField path="--port" type="integer" default="5555">
+  Port to listen on. Must be in the range 1–65535.
+</ParamField>
+
+<ParamField path="--url" type="boolean" default="false">
+  Print the unlock link (including its bearer token) and exit immediately. Use this to get the link again after the initial start without relaunching the server.
+</ParamField>
+
+**Example**
+
+```bash
+harvey dashboard
+# http://127.0.0.1:5555/#token=abc123…
+
+harvey dashboard --url
+# http://127.0.0.1:5555/#token=abc123…   (prints link, exits)
+```
+
+<Warning>
+The dashboard only listens on loopback. To access it from another machine, tunnel with SSH: `ssh -L 5555:127.0.0.1:5555 your-machine`, then open the printed link locally. Never expose the port directly to a network.
+</Warning>
+
+The link carries a bearer token. Opening it authenticates the tab; the token is stripped from the address bar and must not be shared. Run `harvey dashboard --url` to retrieve it later, or delete `data/dashboard-token` and restart the dashboard to rotate it.
+
+---
+
+## harvey status
+
+`harvey status` prints a snapshot of the pipeline so you can see what Harvey has found, what is waiting to be written, and how many model calls have gone out today.
+
+**Syntax**
+
+```bash
+harvey status [--check]
+```
+
+**Flags**
+
+<ParamField path="--check" type="boolean" default="false">
+  In addition to printing the pipeline summary, run a preflight check against the configured brain provider. For Codex this verifies CLI version, process isolation, and login — without sending a prompt. For Claude it confirms the isolation flags are present in the installed CLI version. Exits with code `1` if anything fails, so scripts can act on it.
+</ParamField>
+
+**Example output columns**
+
+```
+  Harvey Pipeline Status
+  ========================================
+  Prospects:            127
+  Ready to write for:   18 (new, with a verified or catch-all email)
+  Draft campaigns:      4
+  Active campaigns:     2
+  Open conversations:   3
+  Claude calls today:   41
+  Codex calls today:    0
+```
+
+Additional lines appear when conditions warrant:
+
+- **Prospecting: PAUSED** — the unusable-draft backlog is too large; `harvey retry-writes` clears it.
+- **Sending: HELD** — sending is paused or a compliance notice (missing postal address) is blocking the outbox.
+- **Brain: PAUSED** — the configured provider is paused with a reason and timestamp.
+
+<Note>
+`harvey status --check` is safe to run in CI or from a cron job. It exits `0` when the brain is ready and `1` when it is not — no model prompt is sent either way.
+</Note>
+
+---
+
+## harvey usage
+
+`harvey usage` shows the active provider's live subscription quota alongside Harvey's own call and token records. Because Harvey runs on a subscription plan rather than a per-token API, the output is labelled in calls and tokens — not dollars.
+
+**Syntax**
+
+```bash
+harvey usage [--days N]
+```
+
+**Flags**
+
+<ParamField path="--days" type="integer" default="30">
+  The window (in days) used for the by-agent and by-task breakdowns. The headline quota gauges always reflect the subscription's live windows regardless of this setting.
+</ParamField>
+
+**Example output**
+
+```
+  Claude Usage
+  ====================================================
+  5-hour window     12.3% used  (resets 2025-11-14 18:00 UTC)
+  Weekly            34.1% used  (resets 2025-11-17 00:00 UTC)
+  Usage limit        0.0% used
+
+  Period      Calls       Input      Output   Cache read
+  Today          41     124,302      38,441      892,004
+  7 days        287     869,441     268,907    6,244,811
+  30 days     1,102   3,341,582   1,032,098   23,981,003
+
+  By agent (last 30 days):
+    scout           421 calls     412,881 out tokens
+    writer          318 calls     389,104 out tokens
+    handler         214 calls     148,221 out tokens
+    analyst         149 calls      82,892 out tokens
+
+  By task (last 30 days):
+    score_prospects   189 calls     201,443 out tokens
+    write_campaign    318 calls     389,104 out tokens
+    …
+```
+
+<Note>
+Subscription plans are not billed per token. The counts in this output measure usage against your plan's rate-limit windows — they are not costs.
+</Note>

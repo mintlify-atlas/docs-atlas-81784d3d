@@ -1,0 +1,116 @@
+---
+title: "Claude Provider: Run Harvey on Your Claude Subscription"
+sidebarTitle: "Claude"
+description: "Claude is Harvey's default brain. Uses your Claude Pro or Max subscription via the Claude CLI — safe-mode isolation, quota tracking, and zero per-token billing."
+---
+
+Claude is Harvey's default brain. Instead of billing per token, Harvey drives the `claude` CLI under your existing Claude Pro or Max subscription. Every model call spends your plan, not a separate API key — so Harvey can run its full skills library for personalization and reply handling without racking up an incremental model bill.
+
+## Prerequisites
+
+- An active **Claude Pro or Max** subscription
+- The **Claude CLI** installed and logged in (`claude login`)
+- Claude CLI version that supports `--safe-mode` (run `claude update` to get the latest)
+
+## Setup
+
+<Steps>
+  <Step title="Install the Claude CLI">
+    Follow the [Claude Code installation guide](https://code.claude.com/docs/en/setup). On macOS the easiest path is:
+
+    ```bash
+    npm install -g @anthropic-ai/claude-code@latest
+    ```
+  </Step>
+
+  <Step title="Log in">
+    ```bash
+    claude login
+    ```
+
+    Complete the browser-based sign-in and confirm your subscription is active.
+  </Step>
+
+  <Step title="Verify the connection">
+    ```bash
+    claude -p "say hi"
+    ```
+
+    If this returns a response, your subscription and CLI are working. Harvey will pick them up automatically.
+  </Step>
+
+  <Step title="(Optional) Confirm Harvey's CLI check offline">
+    ```bash
+    harvey status --check
+    ```
+
+    This runs the same flag-presence check Harvey performs before every prompt — no credentials or network required.
+  </Step>
+</Steps>
+
+## harvey.yaml configuration
+
+Claude is the default provider, so no `brain` block is needed. If you want to be explicit, or switch back from Codex, add this to `harvey.yaml` (or `harvey.local.yaml`):
+
+```yaml
+brain:
+  provider: claude
+  model: ""          # leave blank for the subscription default
+```
+
+Leave `model` blank unless you have a specific reason to pin one. Harvey passes it directly to the CLI with `--model`; an invalid ID causes the call to fail.
+
+## Quota tracking
+
+Harvey reads your Claude subscription's usage windows and throttles itself to avoid crowding out your own Claude work. The cap is set in the `usage` section of `harvey.yaml`:
+
+```yaml
+usage:
+  max_daily_claude_percent: 80
+```
+
+This means Harvey will stop calling Claude for the day once your plan has reached 80% utilization. If the quota cannot be read, the dashboard shows "Quota unavailable" and Harvey falls back to its own internal daily call budget.
+
+Run `harvey usage` to see current quota gauges and per-agent token counts. No dollar figures are shown — you're on a subscription, not paying per token.
+
+## How isolation works
+
+<Note>
+  Every Harvey brain call runs with a strict set of CLI flags that prevent your own Claude Code configuration from leaking into Harvey's prompts. Specifically, each call uses:
+
+  - **`--safe-mode`** — disables your `CLAUDE.md` files (user, project, and all parent folders), hooks, skills, plugins, MCP servers, custom commands, and agents.
+  - **`--setting-sources ""`** — no user, project, or local settings files.
+  - **`--tools ""` and `--strict-mcp-config`** — no built-in tools, no MCP connectors.
+  - **`--disable-slash-commands` and `--no-session-persistence`** — no skills, and nothing about the call is written to your Claude transcripts.
+  - A **fresh, empty temporary directory** as the working directory — never the Harvey checkout.
+  - The **prompt on stdin**, never as a command-line argument (where other users on the system could read it via `ps`).
+
+  Your OAuth login, keychain credentials, and any admin-managed policy still apply. Harvey inherits your subscription — it simply removes everything that could add instructions or save context.
+</Note>
+
+Before any prompt is sent, Harvey checks that the installed CLI supports every one of these flags by running `claude --help`. If a flag is missing, Harvey refuses to call the CLI.
+
+<Warning>
+  If your Claude CLI is too old to support `--safe-mode` (or any other required isolation flag), **Harvey pauses instead of sending prompts unisolated**. The log, `harvey status`, and the dashboard's Actions card will say which flag is missing and ask you to run `claude update`.
+
+  Harvey resumes automatically on the next heartbeat once the updated CLI is detected — no restart needed.
+</Warning>
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Claude CLI not found on PATH` | Install the CLI and run `claude login` |
+| `lacks --safe-mode` (or another flag) | Run `claude update`; Harvey resumes on its own |
+| `claude login` errors or expired session | Re-run `claude login`, confirm subscription is active |
+| Calls fail from inside Docker | Mount `~/.claude` into the container (writable — the CLI refreshes its login there) |
+| `env` / `apiKeyHelper` login not working | Set those environment variables in Harvey's own environment; Harvey's calls don't read settings files |
+
+**Quick diagnostic sequence:**
+
+```bash
+claude login                  # confirm you're logged in
+claude -p "say hi"            # confirm the subscription responds
+claude update                 # update to the latest CLI
+harvey status --check         # confirm Harvey's flag check passes
+```

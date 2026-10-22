@@ -1,0 +1,215 @@
+---
+title: "harvey train and export — Product Training and CSV Export"
+sidebarTitle: "train / export"
+description: "Reference for training Harvey on a product website, exporting prospects to CSV for sequencers, and the gmail and microsoft email provider auth commands."
+---
+
+These commands handle Harvey's product knowledge, your prospect data, and the email provider connections that underpin everything. `harvey train` crawls a website and writes plain-Markdown skill files into `skills/`; `harvey export` writes a sequencer-ready CSV; `harvey gmail` and `harvey microsoft` run the one-time OAuth flows. `harvey install` and `harvey setup` are also covered here.
+
+---
+
+## harvey train
+
+`harvey train` crawls a website, extracts product and competitive information, and writes two Markdown files into `skills/`: `product_knowledge.md` and `competitive_intel.md`. These files are gitignored and loaded straight into agent prompts — no vector store, no retrieval step. Re-running the command updates the product and targeting knowledge while leaving all other configuration untouched.
+
+**Syntax**
+
+```bash
+harvey train <url> [max_pages] [options]
+```
+
+**Positional arguments**
+
+<ParamField path="url" type="string" required>
+  The website URL to crawl. If you omit the scheme, Harvey prepends `https://`.
+</ParamField>
+
+<ParamField path="max_pages" type="integer" default="100">
+  Maximum number of pages to crawl. Must be at least 1.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--provider" type="string" default="from config, else claude">
+  Which subscription to think with. Accepted values: `claude`, `codex`. If omitted, Harvey uses the provider set in `harvey.yaml`; if no config exists yet, it defaults to `claude`.
+</ParamField>
+
+<ParamField path="--model" type="string" default="provider default">
+  Specific model to use for this training run. When omitted, the provider's default model is used. For Codex, you can pass any model ID from your account's catalog (for example `gpt-5.5`, `gpt-5.6-luna`).
+</ParamField>
+
+<ParamField path="--reasoning-effort" type="string">
+  Reasoning effort level for Codex only. Accepted values: `minimal`, `low`, `medium`, `high`, `xhigh`. Has no effect when `--provider claude` is in use.
+</ParamField>
+
+**Examples**
+
+```bash
+# Train on your product website (default provider from config)
+harvey train https://your-company.com
+
+# Crawl up to 50 pages using the Codex provider
+harvey train https://your-company.com 50 --provider codex --model gpt-5.5
+
+# High-effort Codex training
+harvey train https://your-company.com --provider codex --reasoning-effort high
+```
+
+**Output files**
+
+| File | What it contains |
+|---|---|
+| `skills/product_knowledge.md` | What you sell, key benefits, pricing, pain points, buying triggers, offer ladder |
+| `skills/competitive_intel.md` | Battle cards per competitor, differentiation angles, migration paths |
+
+Both files are gitignored. Re-running `harvey train` overwrites them with the latest crawl without touching any other skill files or `harvey.yaml` settings.
+
+<Note>
+Training is not required to run Harvey, but it is the fastest way to get emails that are specific about what you sell. The Writer loads `product_knowledge.md` into every prompt — without it, Harvey cannot name your product, price, or value proposition.
+</Note>
+
+---
+
+## harvey export
+
+`harvey export` writes a CSV of prospects that match the given filters. The output file imports directly into Instantly, Smartlead, or any sequencer that accepts a standard prospect CSV.
+
+**Syntax**
+
+```bash
+harvey export [options]
+```
+
+**Flags**
+
+<ParamField path="--out" type="string" default="prospects.csv">
+  Output file path.
+</ParamField>
+
+<ParamField path="--email-status" type="string" default="verified,risky">
+  Comma-separated email verification statuses to include. Harvey tags every address with one of: `verified`, `risky` (catch-all), `guess`, `invalid`. The default exports only deliverable addresses. Pass a custom list to override, for example `--email-status verified`.
+</ParamField>
+
+<ParamField path="--min-score" type="integer" default="0">
+  Minimum ICP score (0–10). Omitting this flag or passing `0` includes all scores.
+</ParamField>
+
+<ParamField path="--status" type="string">
+  Comma-separated pipeline statuses to include, for example `new,queued`. When omitted, all pipeline statuses are included (subject to the other filters).
+</ParamField>
+
+<ParamField path="--all" type="boolean" default="false">
+  Export everything with no filters — ignores `--email-status`, `--min-score`, and `--status`. Useful for getting the raw prospect list regardless of deliverability.
+</ParamField>
+
+**Examples**
+
+```bash
+# Default: verified and risky emails, all scores and statuses
+harvey export
+
+# Only verified emails with a score of 7 or above
+harvey export --email-status verified --min-score 7 --out high_intent.csv
+
+# New and queued prospects only
+harvey export --status new,queued --out new_prospects.csv
+
+# Everything, no filters
+harvey export --all --out full_list.csv
+```
+
+**Example output**
+
+```
+  Exported 47 prospect(s) to prospects.csv  (email status ['verified', 'risky'])
+  The CSV imports directly into Instantly, Smartlead, or any sequencer.
+```
+
+<Tip>
+Harvey is worth running even if you never let it send. `harvey export` gives you a qualified, signal-enriched prospect list you can import into any outreach tool, at a fraction of what Apollo or ZoomInfo would charge for equivalent coverage on small local businesses.
+</Tip>
+
+---
+
+## harvey gmail
+
+`harvey gmail` runs Gmail-specific utilities. You need to run `auth` once before Harvey can send from a Gmail or Google Workspace mailbox.
+
+**Syntax**
+
+```bash
+harvey gmail auth|test
+```
+
+**Subcommands**
+
+<ParamField path="auth" type="string">
+  Run the one-time OAuth 2.0 flow. Opens a browser window to authorise Harvey's access to the configured Gmail account and saves a token locally. Requires `GMAIL_CLIENT_ID` and `GMAIL_CLIENT_SECRET` in `.env`.
+</ParamField>
+
+<ParamField path="test" type="string">
+  Verify that the saved OAuth token works and Harvey can reach the mailbox. Prints a success or failure message and exits with the corresponding code.
+</ParamField>
+
+```bash
+harvey gmail auth    # one-time setup; opens browser
+harvey gmail test    # verify the connection
+#   ✓ Connected as harvey@yourdomain.com
+```
+
+---
+
+## harvey microsoft
+
+`harvey microsoft` runs Microsoft 365 utilities. Use `auth` once to sign in before Harvey can send from a Microsoft 365 mailbox.
+
+**Syntax**
+
+```bash
+harvey microsoft auth|test
+```
+
+**Subcommands**
+
+<ParamField path="auth" type="string">
+  Run the one-time Microsoft 365 sign-in flow via the Microsoft Graph API. Requires `M365_CLIENT_ID` and `M365_TENANT_ID` in `.env`. See `docs/microsoft365.md` in the repo for the full setup walkthrough.
+</ParamField>
+
+<ParamField path="test" type="string">
+  Verify that the Microsoft 365 connection is working. Prints a success or failure message and exits with the corresponding code.
+</ParamField>
+
+```bash
+harvey microsoft auth    # one-time setup
+harvey microsoft test    # verify the connection
+#   ✓ Connected as harvey@yourdomain.com
+```
+
+---
+
+## harvey install and harvey setup
+
+These two commands handle the initial installation and configuration steps. Run them once when setting Harvey up for the first time.
+
+### harvey install
+
+`harvey install` installs all Python package dependencies and the Playwright browsers Harvey uses for LinkedIn. It checks that Python 3.11 or newer is in use before proceeding — the check is explicit because macOS ships Python 3.9, and a venv built from it silently fails later.
+
+```bash
+harvey install
+#   [1/2] Installing Python packages... ✓
+#   [2/2] Installing Playwright browsers... ✓
+#   Harvey is installed. Run 'harvey setup' next.
+```
+
+### harvey setup
+
+`harvey setup` runs the interactive setup wizard. It walks through persona, product, ICP, email provider, and brain provider configuration, writing the results to `harvey.yaml` (or `harvey.local.yaml`). Run it after `harvey install` or whenever you want to reconfigure from scratch.
+
+```bash
+harvey setup
+```
+
+<Note>
+The fastest way to set up Harvey is to clone the repo, open Claude Code (`claude`), and say **"set up Harvey for me"**. The repo ships a `CLAUDE.md` that turns Claude Code into the setup wizard — it checks what is already configured, installs what is missing, and runs `harvey train` on your product site.
+</Note>

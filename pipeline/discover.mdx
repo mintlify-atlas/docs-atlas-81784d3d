@@ -1,0 +1,111 @@
+---
+title: "Discover Businesses: Finding Prospects with Harvey"
+sidebarTitle: "Discover"
+description: "Find local businesses using OpenStreetMap, DataForSEO Listings, DataForSEO SERP, or Serper. Harvey estimates cost and exits before spending anything."
+---
+
+Discover is the only stage in Harvey's pipeline that costs money, so it is the only one with a mandatory estimate step. Every discovery run projects its spend before calling anything, checks a budget ceiling between query batches, and reads a kill switch while it runs. You never pay for something you did not intend to buy — Harvey shows you the projected cost and exits unless you press go.
+
+## Choosing a provider
+
+Four providers cover the two shapes of discovery. **Listings** providers answer "which businesses of this type exist in this area?" and return phone numbers, domains, ratings, and claimed status. **SERP** providers answer "who ranks for this search?" and return rank positions as buying signals.
+
+| Provider | Cost | Free tier | Best for |
+|---|---|---|---|
+| **OpenStreetMap** *(default)* | Free | Unlimited, no account | Trying the entire pipeline before paying anyone |
+| **DataForSEO Business Listings** | $0.372 / 1,000 results | $1 signup credit | Local trades, clinics, contractors |
+| **DataForSEO SERP** | $0.0018 / search (depth 30) | $1 credit + free sandbox | Rank as a buying signal |
+| **Serper** | ~$0.30–$1.00 / 1,000 searches | 2,500 free searches, no card | Easiest paid provider to try |
+
+Run the provider menu to see current prices and which providers are already configured:
+
+```bash
+harvey discover --providers
+```
+
+## The estimate-first workflow
+
+<Tip>
+Always run `--estimate` before your first paid discovery run, especially for a new city or keyword. It takes less than a second and reveals exactly what you would spend before committing a single credit.
+</Tip>
+
+<Steps>
+  <Step title="Preview the projected spend">
+    ```bash
+    harvey discover --estimate
+    ```
+    Harvey prints the projected cost and exits without calling any API. Nothing is billed.
+  </Step>
+  <Step title="Run the discovery">
+    ```bash
+    harvey discover
+    ```
+    Kicks off the default OpenStreetMap provider against the cities and industries in your ICP configuration.
+  </Step>
+  <Step title="Specify a provider and city">
+    ```bash
+    harvey discover --provider dataforseo_listings --city "Portland, OR"
+    ```
+    Runs a targeted listings search for Portland. The city is geocoded automatically and the result is cached permanently — Portland is only looked up once, ever.
+  </Step>
+  <Step title="Control depth, volume, and budget">
+    ```bash
+    harvey discover --depth 30 --limit 100 --max-spend 2.00
+    ```
+    Caps results per query to 100, retrieves to depth 30 in search results, and stops the run if projected spend would exceed $2.00.
+  </Step>
+</Steps>
+
+## Discovery providers in detail
+
+<CardGroup cols={2}>
+  <Card title="OpenStreetMap (default)" icon="map">
+    Free public map data via the Overpass API. No sign-up, no key, no credit card. Harvey walks three Overpass mirrors before giving up, so a single throttled endpoint does not fail the run. Good for a first end-to-end trial; the coverage caveat below matters for most paid verticals.
+  </Card>
+  <Card title="DataForSEO Business Listings" icon="building">
+    Google Business Profile data as a queryable API, not a scrape. Returns phone, domain, rating, review count, and claimed status per listing. The only source with a filter for businesses that have **no website at all** — which, if you sell web services, is the highest-intent query that exists.
+  </Card>
+  <Card title="DataForSEO SERP" icon="chart-line">
+    Organic search results with rank positions. Positions 11–30 are the prospecting sweet spot: visible enough to be trying, not winning. Use SERP discovery when rank is the signal you are selling against.
+  </Card>
+  <Card title="Serper" icon="magnifying-glass">
+    Fast Google search with rank positions and the friendliest free tier of any paid provider: 2,500 searches with no credit card required. One API key in `.env`, and you are ready to go.
+  </Card>
+</CardGroup>
+
+## Depth and billing
+
+<Note>
+Google removed 100-results-per-page in September 2025. A `--depth 100` search is now billed as ten separate pages nearly everywhere. Below rank 30, results are mostly directories anyway — depth 20–30 is the practical sweet spot.
+</Note>
+
+DataForSEO SERP bills per page of ten results. Depth 30 costs three page credits at $0.0006 each, totalling $0.0018 per search. Requesting depth 100 costs ten page credits at $0.006 — more than three times the useful range.
+
+## City geocoding
+
+Listings providers search a radius, not a place name. When you pass `--city "Portland, OR"`, Harvey queries the Nominatim geocoder (OpenStreetMap's free lookup service) to convert the city to latitude/longitude coordinates, then caches that result permanently in its settings database. Every subsequent run that references the same city skips the geocode step entirely — Portland is looked up once, ever.
+
+Coordinates from `icp.geo_coordinates` in `harvey.yaml` always override the geocoder, which is useful when you want to target a precise area rather than a city centroid.
+
+## Junk filtering
+
+Discovery sources return directories, aggregators, social profiles, and institutional domains alongside real businesses. Harvey filters them by pattern rather than a static blocklist, so `biz.yelp.com`, `en.wikipedia.org`, `m.facebook.com`, and similar domains are removed before they reach the database. Name-level patterns catch category pages and aggregator titles ("Top 10 Roofers in Denver") that pass a domain check.
+
+The approach is pattern-matching rather than a list because a literal blocklist is exactly how `whatclinic.com` and `ufhealth.org` get through on the first run.
+
+## OpenStreetMap coverage caveat
+
+<Note>
+OpenStreetMap maps physical premises. Service-area businesses — roofers, plumbers, HVAC technicians — typically operate from a home address or a depot with no visible storefront, so they are heavily under-represented. OSM holds fewer than 2,000 roofers and fewer than 2,300 plumbers for the entire United States. Harvey reports this in the UI rather than quietly under-delivering. For these verticals, use DataForSEO Business Listings or Serper instead.
+</Note>
+
+## What discovery records
+
+Each discovered business produces a set of observations in the database — only for the signals you have confirmed. Discovery-stage signals include `SERP_RANK`, `NO_WEBSITE`, `UNCLAIMED_LISTING`, `REVIEW_RATING`, and `REVIEW_COUNT`. None are collected until you confirm them:
+
+```bash
+harvey signals --confirm free   # confirm all 21 free signals at once
+harvey signals                  # review and confirm individually
+```
+
+Observations are flushed after each query batch, not at the end of the run. A long run that is interrupted keeps every observation it already recorded.

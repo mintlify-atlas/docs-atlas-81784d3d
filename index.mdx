@@ -1,20 +1,91 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Harvey: Autonomous AI Sales Agent"
+sidebarTitle: "Home"
+description: "Harvey finds prospects, writes personalized cold emails, handles replies, and books meetings — running on your Claude or Codex subscription with no per-token API billing."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Harvey is an autonomous sales agent that runs on your machine. It finds businesses worth selling to, learns something specific about each one, writes cold email that references it, sends it, reads the replies, and works the conversation toward a meeting — all in a heartbeat loop you control.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+The unusual part: **there is no model API bill.** Harvey uses your Claude Pro/Max subscription through Claude Code, or your ChatGPT subscription through Codex. Model calls draw from the plan you already pay for — no API key, no per-token charges.
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install Harvey, configure it, and run your first prospecting cycle in minutes.
+  </Card>
+  <Card title="How Harvey Works" icon="arrows-spin" href="/concepts/how-harvey-works">
+    Understand the heartbeat loop, the five sub-agents, and how decisions are made.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration">
+    Every setting in harvey.yaml and .env — persona, ICP, channels, and usage caps.
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    Complete reference for every harvey command and flag.
+  </Card>
+</CardGroup>
+
+## What Harvey does
+
+Harvey runs a heartbeat loop — wake up, check the budget, decide what most needs doing, do it, log it, sleep. Every 15 minutes by default.
+
+```
+                 ┌──────────────────────────────────────┐
+                 ↓                                      │
+   Wake  →  Quiet hours?  →  Budget OK?  →  Decide  →  Act  →  Log  →  Sleep
+                 │               │
+              (sleep)         (sleep)
+```
+
+It decides deterministically from pipeline state — no model call needed for something derivable from four counts:
+
+```
+handle replies  >  send campaigns  >  write campaigns  >  prospect  >  idle (analyze)
+```
+
+<CardGroup cols={3}>
+  <Card title="Prospect" icon="magnifying-glass" href="/pipeline/discover">
+    Find businesses matching your ICP using OpenStreetMap, DataForSEO, or Serper.
+  </Card>
+  <Card title="Profile" icon="building" href="/pipeline/profile">
+    Read company websites for signals — agency, ad pixels, tech stack, and more.
+  </Card>
+  <Card title="Write" icon="pen-nib" href="/outreach/outbox-and-approval">
+    Generate personalized 3-email sequences, then approve them before they send.
+  </Card>
+</CardGroup>
+
+## Get started
+
+<Steps>
+  <Step title="Install Harvey">
+    Clone the repo, create a virtual environment with Python 3.11+, and install dependencies.
+    ```bash
+    git clone https://github.com/ethanplusai/harvey.git
+    cd harvey
+    python3.13 -m venv .venv && source .venv/bin/activate && pip install -e .
+    ```
+  </Step>
+  <Step title="Configure your product and ICP">
+    Copy `.env.example` to `.env`, fill in your mail credentials, then train Harvey on your website.
+    ```bash
+    cp .env.example .env
+    harvey train https://your-company.com
+    ```
+  </Step>
+  <Step title="Confirm your signals">
+    Tell Harvey which of its 23 prospect signals you want to collect. Nothing is gathered until you confirm.
+    ```bash
+    harvey signals --confirm free
+    ```
+  </Step>
+  <Step title="Run Harvey">
+    Start the dashboard in one terminal, then launch the heartbeat loop.
+    ```bash
+    harvey dashboard   # opens http://127.0.0.1:5555
+    harvey run
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Harvey uses your existing Claude or Codex subscription for all model calls. You need a Claude Pro/Max account with the Claude CLI installed (`claude login`), or a ChatGPT plan with the Codex CLI for the Codex provider.
+</Note>

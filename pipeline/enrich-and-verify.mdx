@@ -1,0 +1,121 @@
+---
+title: "Enrich and Verify: Finding Contacts and Email Addresses"
+sidebarTitle: "Enrich & Verify"
+description: "Find who decides using public registries and team pages, then confirm you can reach them. Every address is tagged: verified, risky, guess, or invalid."
+---
+
+Enrich and Verify are two distinct jobs. Enrich answers "who at this company should I contact?" — finding a real named person (or a general inbox) from public sources. Verify answers "can I actually reach them?" — confirming that an email address will deliver, rather than bounce silently or sit in a dead inbox. Together they take a list of businesses with websites and produce a list of contacts with deliverable addresses.
+
+## ENRICH: finding who decides
+
+Enrichment runs in priority order: free public sources first, falling back to progressively lower-confidence paths only when the higher-confidence ones come up empty.
+
+<Steps>
+  <Step title="Team page — the primary source">
+    Harvey's profile stage already parsed the team page for names and titles. Enrichment starts here: name plus title from the team page, confirmed against a public authoritative registry where one exists. Registry confirmation also filters out parsing artifacts — a "person" who matches nothing in a public registry usually was not one.
+  </Step>
+  <Step title="Public registries">
+    Free authoritative sources are checked before any paid lookup. A person found here carries higher confidence than one found only in scraped HTML, and consumes no credits.
+  </Step>
+  <Step title="Fallback: general address from the homepage">
+    When a company's site names no one and Harvey has no contact on record — common for small trades with no team page — it falls back to a general address the company prints on its own homepage or contact page.
+
+    Only four mailbox types qualify for this fallback:
+    - `owner@`
+    - `office@`
+    - `info@`
+    - `hello@`
+
+    These are never guessed. The address must actually appear on the page, and it is verified through the same pipeline as any named contact. Emails sent to these addresses greet the company's team rather than using a first name.
+  </Step>
+</Steps>
+
+## VERIFY: confirming you can reach them
+
+<Warning>
+A `guess` status is never treated as a win. An unverified address in the outbox is held back entirely — it never reaches the send queue. Running verify without a verification API key means most addresses stay as `guess`, which means they never send.
+</Warning>
+
+### Why SMTP probing does not work
+
+Raw SMTP probing — connecting to a mail server on port 25 and checking whether it accepts a recipient — sounds like the obvious approach. It is not viable in practice:
+
+- **Port 25 is blocked.** Most residential and cloud ISPs block outbound port 25. A laptop running Harvey will usually get a connection refused or timeout before reaching the mail server.
+- **Google Workspace and Microsoft 365 accept everything from unknown IPs.** These hosts warm-greet every `RCPT TO` command from a server they do not recognise, then decide after the fact whether to deliver or bounce. An SMTP check from an unknown IP returns `250 OK` for addresses that do not exist.
+
+Harvey handles this by classifying each domain's mail host — Google, Microsoft, a security gateway (Proofpoint, Mimecast, Barracuda), or a small self-hosted server — and choosing the verification strategy accordingly. For Google and Microsoft domains, a real verification API is the only path to a reliable verdict.
+
+### Email address patterns
+
+Rather than brute-forcing every variation of a person's name, Harvey derives the company's address pattern once and verifies a single candidate:
+
+1. Check the database cache for a previously observed pattern for this domain.
+2. If a confirmed address already exists for this domain (found via scraping or a previous run), infer the pattern from it — this is free and highly accurate.
+3. If a Hunter API key is configured, use its domain-search to retrieve the pattern they have observed for this domain.
+4. Fall back to the most statistically common pattern (`{first}.{last}@domain`) with low confidence.
+
+Named patterns cover the ten most common corporate address formats: `{f}.{l}`, `{f}{l}`, `{fi}{l}`, `{f}`, `{fi}.{l}`, `{f}_{l}`, `{l}`, `{l}.{f}`, `{f}-{l}`, `{l}{fi}`.
+
+### Email status flags
+
+Every address Harvey produces carries one of four statuses:
+
+| Status | Meaning | Sent to? |
+|---|---|---|
+| `verified` | A verification API confirmed the mailbox exists and accepts mail | Yes |
+| `risky` | Domain is a catch-all — accepts everything, so acceptance proves nothing | Only if `send_to_risky: true` in config |
+| `guess` | No verifier was available or the verifier was inconclusive | **Never** |
+| `invalid` | Address does not exist, domain has no MX record, or verifier rejected it | **Never** |
+
+Only deliverable addresses reach the send queue. `guess` and `invalid` are recorded honestly in the database so you can see what was attempted and why it did not proceed.
+
+### Configuring email verification
+
+Add `REOON_API_KEY` to your `.env` file to enable the primary verification path. Reoon's free tier covers a useful number of verifications and handles catch-all detection well for both Google Workspace and Microsoft 365 domains.
+
+```bash
+# .env
+REOON_API_KEY=your_key_here
+```
+
+Harvey's verification order for Google and Microsoft domains: ZeroBounce (if `ZEROBOUNCE_API_KEY` is set) → Reoon (if `REOON_API_KEY` is set) → Hunter (if `HUNTER_API_KEY` is set). For small self-hosted mail servers, SMTP probing is also attempted after Reoon.
+
+Without any verification key configured, all addresses remain as `guess` and none will send.
+
+## Exporting without sending
+
+<Tip>
+Harvey is worth running through enrich and verify even if you never let it send a single email. The CSV it produces is sequencer-ready and can be imported directly into any cold email platform you already use.
+</Tip>
+
+```bash
+harvey export
+```
+
+`harvey export` writes every prospect with a deliverable address to a CSV — including name, title, company, domain, email address, status, and every confirmed signal observation. The file is ready to import into Instantly, Smartlead, Apollo, or any other sequencer that accepts CSV uploads.
+
+This is particularly useful when:
+- You want to use Harvey for prospecting and enrichment but keep your existing sending setup.
+- You are building a list for a one-time outreach campaign rather than Harvey's ongoing heartbeat.
+- You want to review the full list before committing to any sending setup.
+
+## Signal coverage for enrich and verify
+
+Enrichment and verification produce the contact-tier signals in Harvey's catalog:
+
+| Signal | What it records |
+|---|---|
+| `CONTACT_FOUND` | A named person with a title, found on the team page or from a registry |
+| `DECISION_MAKER_TITLE` | A contact whose title identifies them as a buyer (owner, founder, CEO, president, director) |
+| `LIKELY_OWNER` | Strong ownership indicators in the title |
+| `REGISTRY_VERIFIED` | Name confirmed against a public authoritative registry |
+| `EMAIL_PATTERN` | The derived address pattern for this domain |
+| `EMAIL_STATUS` | The verification outcome: `verified`, `risky`, `guess`, or `invalid` |
+| `CONTACT_FORM_URL` | A contact form URL found on the company's site (an alternative to email) |
+
+All of these feed into the cohort builder. A typical campaign query might look like:
+
+```
+INCUMBENT_AGENCY is set  AND  RUNNING_GOOGLE_ADS = 1  AND  EMAIL_STATUS = verified
+→ 14 companies ready to contact
+```

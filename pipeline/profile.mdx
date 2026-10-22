@@ -1,0 +1,98 @@
+---
+title: "Profile Companies: Free HTTP Site Analysis"
+sidebarTitle: "Profile"
+description: "Three free HTTP requests per business extract ad pixels, tech stack, agency credits, schema gaps, blog age, and named contacts. No model call, no API cost."
+---
+
+Profile is the highest value-per-effort stage in Harvey's pipeline, and it costs nothing. Three HTTP requests per business — no browser automation, no model call, no API credits. From the homepage, `robots.txt`, and `sitemap.xml` (plus team and careers pages when they exist), Harvey extracts the signals that make a cold email specific: who the incumbent agency is, whether the business is spending on ads today, what is technically missing from their site, and who the named decision-makers are.
+
+## What profile reads
+
+<CardGroup cols={2}>
+  <Card title="Homepage" icon="house">
+    Parsed for ad pixels (Google Ads, Meta), tech stack fingerprints, schema markup presence, online booking capability, and the agency credited in the footer. Named people are extracted from headings with adjacent role text.
+  </Card>
+  <Card title="robots.txt" icon="robot">
+    Checked for explicit disallow rules targeting known AI crawlers — GPTBot, ClaudeBot, Google-Extended, PerplexityBot, and others. A business blocking AI crawlers has a concrete, checkable position on AI search visibility.
+  </Card>
+  <Card title="sitemap.xml" icon="sitemap">
+    Counted for total pages (`SITE_PAGE_COUNT`) and scanned for `lastmod` dates. The most recent modification date is compared against today to produce a blog-staleness age in days (`BLOG_STALE`).
+  </Card>
+  <Card title="Team and careers pages" icon="users">
+    When a team page exists at common paths (`/team`, `/about`, `/about-us`, `/our-team`, `/staff`, `/leadership`), Harvey parses it for named people with job titles. Careers pages are checked for open role listings.
+  </Card>
+</CardGroup>
+
+## What profile produces
+
+Running profile against a single business can emit any combination of these observations — but only for the signals you have confirmed:
+
+| Signal | What it captures |
+|---|---|
+| `RUNNING_GOOGLE_ADS` | Google Ads tag or conversion pixel detected on the homepage |
+| `RUNNING_META_ADS` | Meta Pixel `fbevents.js` detected |
+| `TECH_STACK` | CMS, analytics tools, chat widgets, and booking platforms detected by HTML fingerprint |
+| `INCUMBENT_AGENCY` | Agency credited in the footer, with a confidence score and evidence URL |
+| `NO_SCHEMA_MARKUP` | No `application/ld+json` structured data found on the homepage |
+| `NO_ONLINE_BOOKING` | No booking widget or scheduling link detected anywhere on the page |
+| `BLOCKS_AI_CRAWLERS` | One or more AI user agents are blocked in `robots.txt` |
+| `BLOG_STALE` | Days since the most recent `lastmod` entry in `sitemap.xml` |
+| `SITE_PAGE_COUNT` | Total `<loc>` entries in `sitemap.xml` |
+| `HIRING_ROLE` | Open role titles found on a careers page |
+| `CONTACT_FOUND` | Named person with a job title found on a team page |
+| `DECISION_MAKER_TITLE` | A contact whose title matches owner, founder, president, CEO, or similar |
+
+## Agency detection
+
+<Tip>
+Agency detection is the compounding signal. Every agency credits itself in almost every footer it builds, and Harvey is reading those footers at scale. Each confirmed agency builds a roster you can target as a whole book of business — rather than one prospect at a time.
+</Tip>
+
+Harvey scores the language around every external link in a business's footer:
+
+| Context wording | Confidence | Recorded? |
+|---|---|---|
+| "Powered by", "Website by", "Built by", "Designed by", "Developed by" | 0.9 | Yes |
+| Descriptive link text: "Web Design", "Digital Marketing", "SEO Agency" | 0.75 | Yes |
+| Unlabelled or bare external link | 0.35 | **No** |
+
+The 0.35 bare-link score is intentionally not recorded. A wrong incumbent in a cold email — naming an agency that has nothing to do with the site — is worse than saying nothing. The threshold of 0.75 means Harvey only records what it can actually back up with observed evidence.
+
+<Accordion title="How the compounding effect works">
+  When Harvey detects that an agency called "Apex Web" built a site, that observation goes into the database with the evidence URL. Over time, as Harvey profiles more businesses in your target verticals, it accumulates a roster of every business currently paying Apex Web. You can query that cohort directly — all businesses where `INCUMBENT_AGENCY = "Apex Web"` — and build a campaign around displacing a specific competitor. That is a campaign with a reason behind it that no static list can provide.
+</Accordion>
+
+## Running profile
+
+```bash
+harvey profile
+```
+
+That is all it takes. Profile picks up every company in the database that has not been looked at yet, or has not been looked at within the stale window.
+
+```bash
+harvey profile --limit 200 --stale-days 90
+```
+
+- `--limit 200` — process at most 200 companies in this run (default 100)
+- `--stale-days 90` — re-profile any company whose profile observations are older than 90 days (default 90)
+
+Re-profiling is safe to run at any time. Each company is marked as checked regardless of outcome — an unreachable site counts as checked, so the same handful of broken domains do not get retried every cycle instead of rotating through the backlog.
+
+## Network boundary
+
+<Note>
+Profile's HTTP requests are limited to public HTTP(S) destinations only. Every DNS answer and redirect target is checked before a connection is made; private, local, link-local, and cloud metadata addresses (including `169.254.169.254`) are rejected. Connections use a validated IP while preserving the website's TLS identity. The profile client ignores environment proxy settings, so proxy routing cannot be used to bypass this boundary.
+</Note>
+
+Harvey tries four URL variants per domain — `https://`, `https://www.`, `http://`, `http://www.` — before marking a site unreachable. Many small-business sites still lack TLS certificates or only answer on the `www` subdomain; trying all four variants avoids false "unreachable" results.
+
+## Profile runs on every heartbeat
+
+Unlike discovery, which you run deliberately when you want to expand your database, profile piggybacks on every heartbeat cycle. It is cheap enough (three HTTP requests, no model call) that Harvey checks for companies needing a profile on each 15-minute cycle. You do not need to invoke it manually unless you want to process a specific batch.
+
+## Tech stack detection
+
+Harvey's tech fingerprints match against HTML it already holds — no extra requests. The detection covers CMS platforms (WordPress, Shopify, Wix, Squarespace, Webflow, Duda, GoDaddy Website Builder), analytics tools (Google Analytics, Google Tag Manager), ad pixels, chat widgets (Intercom, Drift, Podium, Birdeye), scheduling tools (Calendly), field-service platforms (ServiceTitan, Jobber, Housecall Pro), and call tracking (CallRail).
+
+Knowing a prospect runs Housecall Pro or ServiceTitan is a concrete personalization anchor — you know their stack before you write the first line of an email.

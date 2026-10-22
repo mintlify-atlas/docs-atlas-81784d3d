@@ -1,0 +1,117 @@
+---
+title: "Gmail Provider: Send Cold Email via Gmail or Google Workspace"
+sidebarTitle: "Gmail"
+description: "Gmail is Harvey's recommended mail provider. Set up OAuth credentials in Google Cloud Console, run a one-time auth flow, and test with a single command."
+---
+
+Gmail is Harvey's recommended mail provider. It works with both personal Gmail accounts and Google Workspace, using the Gmail REST API directly — no SDK, no third-party relay. For cold email, the right setup is a **dedicated secondary domain** with a Google Workspace mailbox on it (e.g. `getacme.com`, not `acme.com`). That keeps your main domain's sending reputation completely separate.
+
+<Note>
+  Always use a **dedicated secondary domain** for cold outreach — never your main business domain. Cold email carries deliverability risk (bounces, spam complaints), and that risk should be isolated from the domain you use for everything else. A Google Workspace account on a separate domain costs around $7/month and keeps the two sending reputations fully independent.
+</Note>
+
+## Required `.env` variables
+
+```bash
+GMAIL_CLIENT_ID=
+GMAIL_CLIENT_SECRET=
+```
+
+Both values come from Google Cloud Console. The one-time auth flow (`harvey gmail auth`) uses them to exchange an authorization code for a refresh token, which is then stored in `data/gmail_token.json` (mode `600`).
+
+## Setup
+
+<Steps>
+  <Step title="Create a Google Cloud project and enable the Gmail API">
+    1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+    2. Create a new project (or use an existing one)
+    3. Navigate to **APIs & Services → Library**
+    4. Search for **Gmail API** and click **Enable**
+  </Step>
+
+  <Step title="Configure the OAuth consent screen">
+    1. Go to **APIs & Services → OAuth consent screen**
+    2. Choose **Internal** (if using Google Workspace with a single org) or **External** (for testing)
+    3. Fill in the required app name and contact email fields
+    4. No special scopes need to be added here — they are requested at runtime
+  </Step>
+
+  <Step title="Create OAuth 2.0 credentials">
+    1. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+    2. Set the application type to **Desktop app**
+    3. Give it a name (e.g. "Harvey")
+    4. Click **Create**, then copy the **Client ID** and **Client Secret**
+    5. Paste them into your `.env` file:
+
+    ```bash
+    GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
+    GMAIL_CLIENT_SECRET=your-client-secret
+    ```
+  </Step>
+
+  <Step title="Configure harvey.yaml">
+    ```yaml
+    channels:
+      email:
+        provider: gmail
+        max_daily_sends: 50
+        require_approval: true
+    ```
+
+    Also set `persona.email` to the Gmail address Harvey will send from:
+
+    ```yaml
+    persona:
+      email: "harvey@yoursecondary.com"
+    ```
+  </Step>
+
+  <Step title="Run the one-time OAuth flow">
+    ```bash
+    harvey gmail auth
+    ```
+
+    This opens your browser to a Google sign-in page. Sign in as the Gmail or Workspace account Harvey will send from, grant the requested permissions, and the page returns a confirmation. The refresh token is stored at `data/gmail_token.json`. You won't need to repeat this unless you revoke the app's access.
+  </Step>
+
+  <Step title="Test the connection">
+    ```bash
+    harvey gmail test
+    ```
+
+    A successful response looks like:
+
+    ```
+    ✓ Connected as harvey@yoursecondary.com
+    ```
+
+    If this fails, check that `GMAIL_CLIENT_ID` and `GMAIL_CLIENT_SECRET` are set correctly in `.env`, and that you completed `harvey gmail auth`.
+  </Step>
+</Steps>
+
+## harvey.yaml reference
+
+```yaml
+channels:
+  email:
+    provider: gmail
+    max_daily_sends: 50       # ceiling, not a target — ramp up slowly
+    require_approval: true    # every outgoing email waits for your review
+    send_to_risky: false      # also send to catch-all domains (off = safest)
+    max_bounce_rate: 0.05     # pause all sending above this bounce rate
+```
+
+`max_daily_sends: 50` is a safe ceiling for a warmed-up inbox. During warmup (the first 2–4 weeks on a new domain), keep the `warmup` sub-block configured and start lower:
+
+```yaml
+channels:
+  email:
+    provider: gmail
+    warmup:
+      start_date: "2025-01-01"  # YYYY-MM-DD when your warmup service started
+      min_days: 14
+      start_sends: 5
+      daily_increase: 3
+```
+
+Run `harvey warmup` at any time to check SPF, DKIM, DMARC, domain age, and blocklist status for your sending domain.

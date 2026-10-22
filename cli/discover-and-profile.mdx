@@ -1,0 +1,159 @@
+---
+title: "harvey discover and profile — Find and Read Prospects"
+sidebarTitle: "discover / profile"
+description: "Reference for discovery providers, cost estimation, depth limits, the no-profile flag, and profiling staleness settings for reading prospect websites."
+---
+
+These two commands cover the first two stages of Harvey's prospecting pipeline. `harvey discover` finds businesses and is the only stage that spends money — it always estimates before calling anything, and it enforces a hard spend cap. `harvey profile` reads the discovered companies' own websites at no cost; it makes three HTTP requests per site, runs no model call, and produces the observations that make every downstream email specific.
+
+---
+
+## harvey discover
+
+`harvey discover` queries the configured discovery provider for businesses matching your ICP geography and targeting rules, records the results, and optionally profiles what it found in the same run.
+
+**Syntax**
+
+```bash
+harvey discover [options]
+```
+
+**Flags**
+
+<ParamField path="--provider" type="string" default="osm">
+  Discovery provider key. The default `osm` uses OpenStreetMap (free, no account required). Run `--providers` to see every option with cost notes and setup requirements.
+</ParamField>
+
+<ParamField path="--providers" type="boolean" default="false">
+  List every available provider with its cost per unit, free-tier details, required `.env` keys, and signup URL, then exit. Nothing is called or spent.
+</ParamField>
+
+<ParamField path="--estimate" type="boolean" default="false">
+  Print the projected spend and query plan, then exit without calling the provider or writing anything to the database. Use this to sanity-check cost before a real run.
+</ParamField>
+
+<ParamField path="--city" type="string" default="icp.geography">
+  Semicolon-separated list of cities to search, for example `"Denver, CO;Dallas, TX"`. Commas are part of a city name, not separators. Omitting this flag falls back to the geography defined in `icp.geography` in your `harvey.yaml`.
+</ParamField>
+
+<ParamField path="--depth" type="integer" default="30">
+  SERP result depth per query. Keep this at 30 or below. Google removed 100-results-per-page in September 2025, so `--depth 100` is now billed as ten pages on most SERP providers. Below rank 30 results are mostly directories anyway.
+</ParamField>
+
+<ParamField path="--limit" type="integer" default="100">
+  Maximum records returned per query.
+</ParamField>
+
+<ParamField path="--max-spend" type="float" default="1.00">
+  Hard cap in dollars. Discovery stops as soon as the running total would exceed this value. The estimate printed before each run shows whether your query plan fits within it.
+</ParamField>
+
+<ParamField path="--no-profile" type="boolean" default="false">
+  Skip the automatic profiling pass after discovery. Profiling is free and normally runs immediately after discovery so each new company has observations before the Scout scores it. Pass this flag only if you want to run `harvey profile` separately.
+</ParamField>
+
+**Example: inspect providers**
+
+```bash
+harvey discover --providers
+```
+
+```
+  Discovery providers
+  ====================================================================
+
+  OpenStreetMap  [osm]  (ready)
+    Free local business data from the OpenStreetMap Overpass API.
+    Cost: free
+    Free: unlimited, no account
+    Note: OSM maps premises; service-area businesses (roofers, plumbers)
+          are thin — fewer than 2,000 roofers and 2,300 plumbers in the US.
+
+  DataForSEO Business Listings  [dataforseo_listings]  (needs setup)
+    Local business data with phone, domain, ratings, and claimed status.
+    Cost: $0.372 / 1,000 records
+    Free: $1 credit
+    Needs: DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD in .env
+    …
+```
+
+**Example: estimate before spending**
+
+```bash
+harvey discover --provider dataforseo_listings --city "Portland, OR" --estimate
+```
+
+```
+  6 queries via DataForSEO Business Listings
+    - landscaping Portland OR
+    - roofing contractors Portland OR
+    - …
+
+  Estimated cost: $0.0223   (cap: $1.00)
+
+  Estimate only. Re-run without --estimate to collect.
+```
+
+**Example: full run**
+
+```bash
+harvey discover --provider dataforseo_listings --city "Portland, OR"
+```
+
+```
+  Running…
+
+  DISCOVER — 412 results across 6 queries
+    41 new companies, 371 already known
+    8 filtered out as directories/aggregators
+    288 observations recorded
+    actual cost: $0.0223
+
+  PROFILE — 41 sites read, 288 observations  (free)
+
+  Next: harvey dashboard → Signals → cohort builder
+```
+
+<Warning>
+Always run with `--estimate` first when trying a new provider or a large geography. The `--max-spend` cap prevents overruns, but an estimate lets you confirm the query plan is what you expect before anything is called.
+</Warning>
+
+---
+
+## harvey profile
+
+`harvey profile` reads discovered companies' own websites and records what it finds as observations. It makes three HTTP requests per site — homepage, `robots.txt`, `sitemap.xml`, plus team and careers pages when they exist — runs no model call, and costs nothing. It is safe to re-run; the `--stale-days` flag controls when a site is considered worth re-reading.
+
+**Syntax**
+
+```bash
+harvey profile [options]
+```
+
+**Flags**
+
+<ParamField path="--limit" type="integer" default="200">
+  Maximum number of sites to read in a single run.
+</ParamField>
+
+<ParamField path="--stale-days" type="integer" default="90">
+  Re-read a site after this many days. Companies profiled more recently than the threshold are skipped.
+</ParamField>
+
+**Example output**
+
+```bash
+harvey profile
+```
+
+```
+  84 companies need profiling. Reading up to 200…
+
+  Read 84 sites → 601 observations (free)
+
+  See what turned up: harvey dashboard → Signals
+```
+
+<Tip>
+Profiling normally runs automatically at the end of `harvey discover`. Run it standalone with `harvey profile` when you want to refresh stale observations without triggering a new discovery run, or when you added companies through another path (for example a CSV import).
+</Tip>

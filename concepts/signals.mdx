@@ -1,0 +1,129 @@
+---
+title: "Prospect Signals: What Harvey Looks For"
+sidebarTitle: "Signals"
+description: "Harvey proposes 23 configurable signals across four categories — nothing is collected until you confirm each one from the dashboard or CLI."
+---
+
+Signals are the confirmation gate between Harvey finding a business and Harvey doing anything with it. Harvey knows how to collect 23 signals about a prospect — but it collects none of them until you say so. On first run it proposes the full catalog; you confirm, skip, or reject each one in the dashboard or from the terminal. A prospect list you can't explain is a prospect list you shouldn't send to, and confirming signals is how you make the list explainable.
+
+<Note>
+Nothing is collected on a prospect until at least one signal is confirmed. Running `harvey discover` without confirming any signals will find businesses but produce no observations to act on. The dashboard's **Signals** screen and `harvey signals` in the terminal both show the full catalog with costs and current match counts.
+</Note>
+
+## Confirming signals
+
+```bash
+harvey signals                       # review the full catalog
+harvey signals --confirm free        # confirm everything that costs nothing (21 of them)
+harvey signals --confirm SERP_RANK   # confirm one specific paid signal
+```
+
+Each signal shows its plain-language description, its exact cost, and how many companies in your database already carry it. You can confirm, skip, or reject individually. The dashboard's Signals screen does the same thing interactively.
+
+## Why confirming is not skippable
+
+Harvey proposes signals; you confirm them. This is deliberate, and it is not a flow you can shortcut. The reasoning:
+
+1. **Explainability.** Every company on your outreach list was put there by signals you approved. If a prospect pushes back on how you found them, you can answer exactly.
+2. **Spend control.** Paid signals cost real money. Harvey never calls a paid API without explicit confirmation.
+3. **Accuracy over recall.** It is better to have 23 companies you are certain about than 230 you are guessing about. The cohort builder is a filter, not a list.
+
+## The 23 signals
+
+<Tabs>
+  <Tab title="Discovery">
+    Discovery signals come from the business listing lookup — where and how visible a business is in search. These run at the `discover` stage.
+
+    | Signal | What it tells you | Cost |
+    |--------|------------------|------|
+    | `SERP_RANK` | Where they rank for their core `<service> <city>` search. Positions 11–30 are the sweet spot: visible enough to be trying, not winning yet. Top-10 are already winning (harder sell). | ~$0.0006 per search (paid SERP API) |
+    | `NO_WEBSITE` | They have a listing and a phone number but no site. If you sell websites, the highest-intent signal that exists — and it is a filter you can query for directly. | Included in listing lookup |
+    | `UNCLAIMED_LISTING` | Nobody has claimed their Google Business Profile, so they're not managing how they show up locally. Strong signal for anyone selling local marketing. | Included in listing lookup |
+    | `REVIEW_RATING` | Average star rating. A low rating is a reputation problem to solve; a high rating with few reviews means they're good but invisible. | Included in listing lookup |
+    | `REVIEW_COUNT` | How many reviews they have — a rough proxy for size and attention paid to their online presence. | Included in listing lookup |
+  </Tab>
+
+  <Tab title="Profile">
+    Profile signals come from three HTTP requests Harvey makes to each business's site: homepage, `robots.txt`, and `sitemap.xml`. No model call, no browser. Free.
+
+    | Signal | What it tells you | Cost |
+    |--------|------------------|------|
+    | `INCUMBENT_AGENCY` | An agency credited in the footer ("Website by X"). Every detection builds a roster you can target as a whole book of business. Only recorded when the credit wording is explicit — a wrong incumbent is worse than none. | Free (homepage HTML) |
+    | `RUNNING_GOOGLE_ADS` | Google Ads tag on the site — they are spending on acquisition today. The strongest budget signal available for free. | Free (homepage HTML) |
+    | `RUNNING_META_ADS` | Meta Pixel on the site — actively spending on paid social. | Free (homepage HTML) |
+    | `NO_ONLINE_BOOKING` | No booking or scheduling widget detected. Leads have to phone in, so after-hours demand is lost. | Free (homepage HTML) |
+    | `NO_SCHEMA_MARKUP` | No JSON-LD structured data — a concrete, checkable SEO gap you can name in an email without sounding like you ran a scan. | Free (homepage HTML) |
+    | `BLOG_STALE` | No new content in a long time — content marketing started and abandoned. | Free (sitemap.xml) |
+    | `SITE_PAGE_COUNT` | Page count from `sitemap.xml`. A very thin site suggests little investment; a large stale one suggests neglect. | Free (sitemap.xml) |
+    | `TECH_STACK` | What the site is built on and which tools it runs (WordPress, Shopify, HubSpot, chat widgets, booking tools). | Free (homepage HTML) |
+    | `BLOCKS_AI_CRAWLERS` | `robots.txt` blocks AI crawlers — they'll be invisible in AI search answers. | Free (robots.txt) |
+    | `HIRING_ROLE` | An open role on their careers page implying they're buying in your category right now. | Free (careers page) |
+  </Tab>
+
+  <Tab title="People">
+    People signals come from the team and about pages, enriched against public registries where available.
+
+    | Signal | What it tells you | Cost |
+    |--------|------------------|------|
+    | `CONTACT_FOUND` | A named person scraped from the team/about page, with their title. | Free (team page) |
+    | `DECISION_MAKER_TITLE` | Title matches an owner/decision-maker pattern (Owner, President, Practice Manager, Marketing Director). | Free (team page) |
+    | `LIKELY_OWNER` | Registry indicators suggest this person owns the business rather than working there. | Free (public registry API) |
+    | `REGISTRY_VERIFIED` | The person was confirmed in an authoritative public registry — a licensing board or professional registry. Also filters out scraping artifacts: a name that matches nothing usually wasn't a person. | Free (public registry API) |
+  </Tab>
+
+  <Tab title="Contact">
+    Contact signals are about reachability — whether you can actually reach the person you found.
+
+    | Signal | What it tells you | Cost |
+    |--------|------------------|------|
+    | `EMAIL_PATTERN` | The domain's address format (first.last@, flast@, etc.). One real address on the site cracks the pattern for the whole company. | Free, or ~1 lookup credit |
+    | `EMAIL_STATUS` | Whether the address is `verified`, `risky` (catch-all domain), `guess`, or `invalid`. Only deliverable addresses are ever sent to. | 1 verification credit (free tiers available) |
+    | `CONTACT_FORM_URL` | A contact form is available. Reaches the business without needing an email address — useful because roughly half of domains can't be email-verified. | Free (site HTML) |
+  </Tab>
+</Tabs>
+
+## Cost breakdown
+
+Of the 23 signals, 21 are free. The two paid ones require explicit opt-in.
+
+| Category | Free signals | Paid signals |
+|----------|-------------|-------------|
+| Discovery | `NO_WEBSITE`, `UNCLAIMED_LISTING`, `REVIEW_RATING`, `REVIEW_COUNT`, `FOUND_IN_SERP` | `SERP_RANK` (~$0.0006/search) |
+| Profile | All 10 profile signals | — |
+| People | All 4 people signals | — |
+| Contact | `CONTACT_FORM_URL` | `EMAIL_STATUS` (1 verification credit) |
+
+```bash
+# The fastest path: confirm everything free, then decide on the paid ones
+harvey signals --confirm free
+harvey signals --confirm SERP_RANK   # only if you want rank data
+```
+
+## The cohort builder: a query, not a list
+
+Once signals are confirmed, the dashboard's cohort builder turns them into a target set. Pick what a good prospect **must have** and what **disqualifies** them, and it counts matches live against your database:
+
+```text
+Has a marketing agency  AND  running Google Ads  AND NOT  already has online booking
+→ 23 companies
+```
+
+That is a campaign with a reason behind it. You know exactly why each of those 23 is on the list — and so does the email Harvey writes them, because the same signals seed the Writer's personalization context.
+
+<Tip>
+The cohort builder runs as a SQL query over your `observations` table. Every fact is a row with confidence and a source URL, so "why is this company in the cohort?" has a precise answer.
+</Tip>
+
+## Agency detection and confidence scoring
+
+`INCUMBENT_AGENCY` is the compounding signal. Almost every agency credits itself somewhere in the footer, and Harvey scores the wording:
+
+| Wording pattern | Confidence | Recorded? |
+|----------------|-----------|----------|
+| `"Powered by"` / `"Website by"` + company name | 0.9 | Yes |
+| Bare descriptive link with agency name | 0.75 | Yes |
+| Unlabelled link to a domain that looks like an agency | 0.35 | **No** |
+
+The 0.35 threshold is deliberately not recorded. A wrong incumbent name in an email — crediting someone who isn't actually the agency — is worse than saying nothing. Harvey only records what it's confident about, and the confidence and source URL travel with every observation.
+
+Every detection also builds an **agency roster**: all the businesses crediting the same agency are a cohort you can target as a whole book of business, approaching the agency's client base rather than individual companies one at a time.

@@ -1,0 +1,199 @@
+---
+title: "harvey outbox and sending — Approve Emails and Kill Switch"
+sidebarTitle: "outbox / sending"
+description: "Reference for outbox approval commands, bulk approve and reject, the sending kill switch, deliverability warmup checks, and the retry-writes command."
+---
+
+By default every outgoing email Harvey writes waits for your approval before it leaves the outbox. These commands let you review, approve, and reject queued emails from the terminal; pause and resume sending entirely; check whether your sending domain is ready for cold email; and put stalled draft attempts back in the queue.
+
+---
+
+## harvey outbox
+
+`harvey outbox` with no flags shows everything currently in the outbox: items awaiting your approval and items that have already been approved and are scheduled to send. With a flag, it approves or rejects a specific item, or approves everything at once.
+
+**Syntax**
+
+```bash
+harvey outbox [--approve ID | --approve-all | --reject ID]
+```
+
+**Flags**
+
+<ParamField path="--approve" type="string">
+  Approve the outbox item with the given ID. The item moves from `pending_review` to `approved` and will send on its scheduled time.
+</ParamField>
+
+<ParamField path="--approve-all" type="boolean" default="false">
+  Approve all items currently in `pending_review` status. Use this when you have reviewed the drafts in the dashboard and want to release the whole batch.
+</ParamField>
+
+<ParamField path="--reject" type="string">
+  Reject the outbox item with the given ID. Rejected items are not sent.
+</ParamField>
+
+**Without flags — outbox review**
+
+```bash
+harvey outbox
+```
+
+```
+  Outbox — 3 awaiting approval, 7+ approved/scheduled
+  ============================================================
+
+  [42] step 1 (cold) → owner@cascadelandscaping.com  (send 2025-11-14 09:00)
+  Subject: noticed you're not showing on Google Maps for "lawn care Portland"
+    Hi Sarah,
+
+    Noticed Cascade Landscaping sits around position 18 for "lawn care
+    Portland" — just outside the map pack where most clicks go. The
+    businesses on page one are running Google Ads; you're not, which means
+    they're paying for visibility you could have organically.
+    …
+
+  Approve: harvey outbox --approve <id>   |   all: harvey outbox --approve-all
+  Reject:  harvey outbox --reject <id>
+```
+
+If sending is currently paused, a warning banner appears at the top of the output with a reminder to run `harvey sending resume`.
+
+<Tip>
+The dashboard's **Outbox** tab is a decisions desk optimised for reviewing drafts one at a time: one email fills the pane, the rest wait in a rail, and `A` / `R` approves or rejects without lifting your hands from the keyboard.
+</Tip>
+
+---
+
+## harvey sending
+
+`harvey sending` is a global kill switch for outbound email. Pausing stops everything mid-flight; resuming also resets the bounce counter.
+
+**Syntax**
+
+```bash
+harvey sending [pause|resume|status]
+```
+
+**Subcommands**
+
+<ParamField path="pause" type="string">
+  Stop all outbound sending immediately. Nothing leaves the outbox while sending is paused. Harvey's heartbeat loop continues running — it still discovers, profiles, scores, and writes — it just won't deliver anything.
+</ParamField>
+
+<ParamField path="resume" type="string">
+  Resume sending and reset the bounce counter to zero. Use this after fixing a deliverability problem that tripped the automatic kill switch.
+</ParamField>
+
+<ParamField path="status" type="string">
+  Show the current sending state. This is the default when no subcommand is provided.
+</ParamField>
+
+**Examples**
+
+```bash
+harvey sending pause
+#   Sending paused. Nothing will leave the outbox.
+
+harvey sending resume
+#   Sending resumed (bounce counter reset).
+
+harvey sending status
+#   Sending: active
+
+harvey sending status   # when paused
+#   Sending: PAUSED — paused manually
+```
+
+<Warning>
+`harvey sending pause` stops outbound email but does not stop Harvey's loop. Campaigns are not cancelled — they resume when you run `harvey sending resume`. To stop the loop entirely, use `Ctrl+C` on the `harvey run` process.
+</Warning>
+
+---
+
+## harvey warmup
+
+`harvey warmup` checks whether a sending domain is configured correctly and ready for cold email. It reads public DNS records (MX, SPF, DKIM, DMARC), checks the domain's age, queries blocklists, and reads Harvey's own send history. No email is sent.
+
+**Syntax**
+
+```bash
+harvey warmup [domain]
+```
+
+**Positional argument**
+
+<ParamField path="domain" type="string">
+  The domain to check. Optional — if omitted, Harvey uses the domain of the configured sending mailbox.
+</ParamField>
+
+**What it checks**
+
+| Section | Checks |
+|---|---|
+| Authentication | MX record, SPF, DKIM, DMARC |
+| Reputation | Domain age, domain blocklists, IP blocklists (SMTP only) |
+| Warmup & sending | Warmup progress against config, send history and bounce rate |
+
+**Verdicts**
+
+| Verdict | Meaning |
+|---|---|
+| `READY` | All checks passed — send within today's cap and watch bounces |
+| `NOT READY` | One or more `FAIL` items must be fixed before any cold email |
+| `READY WITH CAVEATS` | Warnings present — keep volume low |
+| `NOT CHECKED` | One or more authentication DNS lookups failed — run again |
+
+**Example**
+
+```bash
+harvey warmup yourdomain.com
+```
+
+```
+  Deliverability check - yourdomain.com
+  ========================================================
+
+  Authentication
+    [OK  ] MX record                 mail.yourdomain.com
+    [OK  ] SPF                       v=spf1 include:_spf.google.com ~all
+    [OK  ] DKIM                      selector: google, key present
+    [OK  ] DMARC                     p=quarantine; rua=mailto:…
+
+  Reputation
+    [OK  ] Domain age                4 years, 2 months
+    [OK  ] Spamhaus ZEN              not listed
+    [OK  ] Barracuda                 not listed
+
+  Warmup & sending
+    [OK  ] Warmup progress           day 23 of 28, 85% inbox
+    [WARN] Bounce rate               2.8% (threshold: 3%)
+
+  ========================================================
+  READY WITH CAVEATS - 1 warning(s); keep volume low.
+```
+
+Exits with code `1` when the verdict is `NOT READY` or `NOT CHECKED`, so it can be used in scripts.
+
+---
+
+## harvey retry-writes
+
+`harvey retry-writes` puts prospects the Writer gave up on back in the queue for another attempt. Harvey's Writer retries each prospect up to a configured maximum number of times; when it exhausts those retries, the prospect is marked `write_failed` and removed from the active queue. This command resets that status so the Writer tries again.
+
+**Syntax**
+
+```bash
+harvey retry-writes
+```
+
+There are no flags.
+
+```bash
+harvey retry-writes
+#   3 prospect(s) are back in line. The Writer will try each up to 3 more times.
+
+harvey retry-writes   # when nothing is waiting
+#   No prospects are waiting on a retry.
+```
+
+`harvey status` shows the count of `write_failed` prospects in its pipeline summary when the number is non-zero. That is a good signal for when to run `harvey retry-writes`.

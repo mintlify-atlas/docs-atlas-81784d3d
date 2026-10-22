@@ -1,0 +1,284 @@
+---
+title: "Troubleshooting Harvey: Common Issues and Fixes"
+sidebarTitle: "Troubleshooting"
+description: "Solutions for the most common Harvey problems: installation errors, macOS Python issues, Claude and Codex authentication failures, dashboard access, and mail delivery."
+---
+
+Most Harvey issues fall into a handful of categories: installation environment, provider authentication, and mail configuration. The sections below cover every error that comes up repeatedly, with the exact fix for each one.
+
+<AccordionGroup>
+
+<Accordion title="`command not found: harvey`">
+
+The virtual environment is not active in your current shell session. Activate it first:
+
+```bash
+source .venv/bin/activate
+```
+
+After activation, `harvey` should resolve. You'll need to do this in every new terminal window. To check that it's working:
+
+```bash
+which harvey
+# should print something like: /path/to/harvey/.venv/bin/harvey
+```
+
+</Accordion>
+
+<Accordion title="`ModuleNotFoundError: No module named 'harvey'` after install (macOS)">
+
+Python 3.13 on macOS silently ignores `.pth` files that carry a hidden (`com.apple.quarantine`) flag, and some Macs propagate that flag into `.venv` during creation. The module installs correctly but the path entry is never loaded.
+
+The fastest fix is to let Harvey repair it:
+
+```bash
+harvey install
+```
+
+`harvey install` detects and removes the quarantine flag automatically. If you'd prefer to fix it by hand:
+
+```bash
+ln -s "$(pwd)/harvey" .venv/lib/python3.13/site-packages/harvey
+```
+
+</Accordion>
+
+<Accordion title="`error: externally-managed-environment`">
+
+You're trying to install Harvey into your system Python rather than a virtual environment. Use a venv:
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Never install Harvey (or any project) into the system Python. The `externally-managed-environment` error is Python's way of protecting the OS from package conflicts.
+
+</Accordion>
+
+<Accordion title="`SyntaxError` or strange `ImportError`s right after install (macOS)">
+
+Your virtual environment was built from macOS's built-in Python 3.9, not from Python 3.13. Harvey requires Python 3.11 or newer. When you run `python3 -m venv .venv` on a stock Mac, `/usr/bin/python3` is used — and that's 3.9.
+
+Check what Python your venv is running:
+
+```bash
+.venv/bin/python -V
+# Python 3.9.x  ← this is the problem
+```
+
+Rebuild from the correct Python. Install 3.13 via Homebrew first if you haven't:
+
+```bash
+brew install python@3.13
+rm -rf .venv
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Note the explicit `python3.13` — not `python3`. On macOS, bare `python3` continues to point at the system 3.9 even after Homebrew installs a newer version.
+
+</Accordion>
+
+<Accordion title="Claude headless mode fails">
+
+Work through these checks in order:
+
+**1. Log in and confirm your subscription is active.**
+
+```bash
+claude login
+```
+
+Open [claude.ai](https://claude.ai) and confirm your Pro or Max subscription shows as active.
+
+**2. Test the CLI directly.**
+
+```bash
+claude -p "say hi"
+```
+
+If this fails, the problem is with the Claude CLI itself, not Harvey. Fix it there first.
+
+**3. Docker: mount `~/.claude` as a writable volume.**
+
+The Claude CLI refreshes its login token inside `~/.claude`. If that directory isn't mounted (or is mounted read-only), the CLI can't renew the session and calls fail:
+
+```bash
+docker run -v ~/.claude:/root/.claude:rw ...
+```
+
+**4. "lacks --safe-mode" in the log.**
+
+Harvey requires a Claude CLI that supports `--safe-mode`. If your installed version doesn't have it, update:
+
+```bash
+claude update
+```
+
+In Docker, rebuild the image. Harvey resumes automatically on the next heartbeat after the update.
+
+**5. `env` or `apiKeyHelper` in your Claude settings.**
+
+Harvey's calls don't load any Claude settings files. If your login depends on variables set via `env` or `apiKeyHelper` in a Claude config, set those variables directly in Harvey's environment (`.env` file) instead.
+
+**6. Check without sending a prompt.**
+
+```bash
+harvey status --check
+```
+
+This runs the same CLI verification Harvey runs before each heartbeat, without consuming any quota or sending a prompt.
+
+</Accordion>
+
+<Accordion title="Dashboard says 'locked'">
+
+The dashboard token is required. Open the exact link that `harvey dashboard` printed:
+
+```bash
+harvey dashboard --url    # reprints the link if the server is already running
+```
+
+The link looks like `http://127.0.0.1:5555/#token=…`. Opening the URL without the `#token=…` fragment shows the locked screen.
+
+If the dashboard says the token file **can't be used** (wrong permissions, wrong owner, or extra hard links), follow the message. The usual fix:
+
+```bash
+rm data/dashboard-token
+# then restart the dashboard — it creates a fresh token
+harvey dashboard
+```
+
+Visit the dashboard as `127.0.0.1` or `localhost`. Any other hostname in the URL — even a DNS name that resolves to `127.0.0.1` — is refused by the Host header check.
+
+</Accordion>
+
+<Accordion title="Codex calls fail">
+
+Every Codex error produces a log line that says exactly what to do. Match the message:
+
+| Log message | What to do |
+|---|---|
+| `"expired or is due for renewal"` | Use Codex once yourself (it renews automatically) or run `codex login`. Harvey picks up the refreshed login on its next heartbeat. |
+| `"hasn't been verified with Harvey"` | Install the exact Codex version named in the message. Harvey only supports one version at a time: `npm install -g @openai/codex@0.159.3` |
+| `"isolation could not be verified"` | A Codex config layer outside `~/.codex` (for example `/etc/codex/config.toml` or a managed enterprise config) is forcing a tool, hook, MCP server, or custom endpoint back on. Harvey refuses to send prompts until that layer is removed or neutralised. |
+| Model catalog errors | Choose an available model ID from the catalog shown in the message, or leave `brain.model` blank to let Harvey select a listed model automatically. |
+
+Harvey never falls back to Claude if Codex fails. A Codex-only setup stays on Codex.
+
+To run the isolation check offline without credentials or network:
+
+```bash
+HARVEY_CODEX_CLI_TESTS=1 pytest tests/test_codex_cli_surface.py
+```
+
+</Accordion>
+
+<Accordion title="Discovery finds nothing">
+
+**Check that signals are confirmed first.** Harvey collects nothing until you approve at least one signal. If you haven't confirmed any:
+
+```bash
+harvey signals --confirm free    # confirms all 21 free signals at once
+```
+
+**On the free OpenStreetMap source, coverage is thin for service-area businesses.** OSM maps premises, not service areas — whole trades like roofers and plumbers are barely represented (under 2,000 roofers and 2,300 plumbers in the entire US). If you sell to trades, the paid providers cover them far better:
+
+```bash
+harvey discover --providers    # shows the menu with real prices
+```
+
+Harvey tells you this in the Discover UI rather than quietly returning empty results.
+
+</Accordion>
+
+<Accordion title="Overpass is throttling">
+
+Overpass is free volunteer infrastructure. Harvey walks three mirrors before giving up, but during peak hours all three can be slow or unresponsive.
+
+Wait a few minutes and try again, or switch to a paid provider for bulk discovery work:
+
+```bash
+harvey discover --providers
+```
+
+Throttling from Overpass is never a Harvey bug — it's capacity on infrastructure Harvey has no control over.
+
+</Accordion>
+
+<Accordion title="Emails land in spam">
+
+The cause is almost always the sending domain, not the email copy. Work through this list before changing anything in the message:
+
+1. **Check SPF, DKIM, and DMARC.** All three must be set up correctly. `harvey warmup` checks them and returns `READY` or `NOT READY` with specific findings.
+2. **Confirm warmup ran.** Sending cold email from a brand-new domain without warming it first results in permanent spam placement. A minimum of 2–4 weeks of warmup is typical.
+3. **Halve your send volume.** If you're hitting `max_daily_sends` consistently, pull it back. ISPs flag accounts that ramp too fast.
+
+Run the warmup check:
+
+```bash
+harvey warmup
+```
+
+</Accordion>
+
+<Accordion title="Harvey does nothing during the day">
+
+Two settings can cause Harvey to skip cycles silently:
+
+**`quiet_hours`** in `harvey.yaml` — Harvey won't run during these hours. Check what window you've configured.
+
+**`max_daily_claude_percent`** — Harvey budgets its Claude or Codex usage to leave headroom for your own work. If it has hit the configured limit for today, it sleeps until tomorrow.
+
+Check current state:
+
+```bash
+harvey status
+```
+
+The output shows whether Harvey is paused, what it last decided, and whether budget or quiet hours are the cause. Every decision Harvey makes is also logged to the `actions` table in `data/harvey.db`.
+
+</Accordion>
+
+<Accordion title="How do I stop Harvey right now?">
+
+**Ctrl+C** stops the heartbeat loop immediately.
+
+If you want to stop outbound email without stopping the loop entirely (for example, if you want Harvey to keep reading replies and profiling companies):
+
+```bash
+harvey sending pause
+```
+
+This trips the kill switch. Nothing goes out until you resume:
+
+```bash
+harvey sending resume
+```
+
+State is stored in SQLite, so Harvey resumes cleanly from exactly where it was — no half-sent campaigns, no lost queue items.
+
+</Accordion>
+
+<Accordion title="Where does my data live?">
+
+All of Harvey's data stays on your machine:
+
+| File | Contents |
+|---|---|
+| `data/harvey.db` | SQLite database — every company, contact, observation, campaign, conversation, and action |
+| `.env` | API keys and credentials |
+| `harvey.yaml` / `harvey.local.yaml` | Configuration — persona, product, ICP, channel settings |
+
+Nothing is sent anywhere except the APIs you've explicitly configured (your mail provider, your discovery provider, and optionally Precleared). There is no Harvey cloud, no telemetry, and no central server.
+
+<Note>
+If you ever want to move Harvey to a different machine or back up your pipeline, copy `data/harvey.db`, `.env`, and `harvey.yaml` (or `harvey.local.yaml`). That's everything.
+</Note>
+
+</Accordion>
+
+</AccordionGroup>

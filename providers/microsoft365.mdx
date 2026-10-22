@@ -1,0 +1,133 @@
+---
+title: "Microsoft 365 Provider: Send Email via Exchange Online"
+sidebarTitle: "Microsoft 365"
+description: "Harvey supports Microsoft 365 and Exchange Online via the Microsoft Graph API — OAuth with PKCE, no passwords or client secrets, one-time sign-in flow."
+---
+
+Harvey supports Microsoft 365 and Exchange Online via the Microsoft Graph API. Because Exchange Online no longer accepts passwords for IMAP in most tenants, Harvey signs in with OAuth (authorization code + PKCE) instead — no password is stored, no client secret is needed, and the refresh token is rotated on every use.
+
+For a full setup walkthrough including admin consent and tenant restrictions, see the [Microsoft 365 setup guide](https://github.com/ethanplusai/harvey/blob/main/docs/microsoft365.md).
+
+## Required `.env` variables
+
+```bash
+M365_CLIENT_ID=    # Application (client) ID from Entra ID
+M365_TENANT_ID=    # Directory (tenant) ID from Entra ID
+```
+
+No client secret is needed. Harvey is a public client and signs in using the authorization code + PKCE flow.
+
+## Required Microsoft Graph API permissions
+
+Harvey requests the following **delegated** permissions. All four are required:
+
+| Permission | Why |
+|---|---|
+| `Mail.Send` | Send outbound email |
+| `Mail.ReadWrite` | Read replies and create drafts for reply threading |
+| `User.Read` | Confirm which mailbox the token belongs to |
+| `offline_access` | Keep working without signing in again |
+
+## Setup
+
+<Steps>
+  <Step title="Register an app in Entra ID">
+    Go to [entra.microsoft.com](https://entra.microsoft.com), then:
+
+    **Applications → App registrations → New registration**
+
+    | Field | Value |
+    |---|---|
+    | Name | `Harvey` |
+    | Supported account types | *Accounts in this organizational directory only* |
+    | Redirect URI platform | **Public client/native (mobile & desktop)** |
+    | Redirect URI value | `http://localhost:8766` |
+
+    Click **Register**. From the app's **Overview** page, copy:
+    - **Application (client) ID** → `M365_CLIENT_ID`
+    - **Directory (tenant) ID** → `M365_TENANT_ID`
+
+    Do **not** create a client secret. Harvey is a public client.
+  </Step>
+
+  <Step title="Add credentials to .env">
+    ```bash
+    M365_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    M365_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    ```
+  </Step>
+
+  <Step title="Configure harvey.yaml">
+    ```yaml
+    persona:
+      email: "you@yourdomain.com"   # must match the mailbox you sign in with
+
+    channels:
+      email:
+        provider: microsoft
+    ```
+
+    The signed-in mailbox must match `persona.email`. If they don't match, every read and send is refused with a message explaining the mismatch — this prevents accidentally sending from an admin account that approved the app.
+  </Step>
+
+  <Step title="Sign in once">
+    ```bash
+    harvey microsoft auth
+    ```
+
+    This opens your browser to a Microsoft sign-in page. Sign in as the sending mailbox (`persona.email`) — not as an admin. Harvey stores the refresh token in `data/m365_token.json` (mode `600`, gitignored). Microsoft rotates the token on every use; Harvey saves the new one each time.
+  </Step>
+
+  <Step title="Test the connection">
+    ```bash
+    harvey microsoft test
+    ```
+
+    A successful response looks like:
+
+    ```
+    ✓ Connected as you@yourdomain.com
+    ```
+  </Step>
+</Steps>
+
+## harvey.yaml reference
+
+```yaml
+channels:
+  email:
+    provider: microsoft
+    max_daily_sends: 50
+    require_approval: true
+```
+
+## Why not SMTP + IMAP?
+
+Exchange Online no longer accepts a password for IMAP, and SMTP AUTH is off by default in most tenants. The `smtp` provider can sometimes still send, but cannot read the inbox. Harvey must read replies to stop sequences, honor opt-outs, and catch bounces. If it can send but can't read, it will keep emailing people who already replied.
+
+The `microsoft` provider solves this with OAuth.
+
+## If your tenant requires admin approval
+
+If you see "Need admin approval" during the auth flow, your tenant administrator must grant consent before users can authorize the app:
+
+1. In Entra ID, open **App registrations → Harvey → API permissions**
+2. Add the four Microsoft Graph delegated permissions listed above
+3. Click **Grant admin consent**
+4. Run `harvey microsoft auth` again and sign in as the **sending mailbox**, not the admin
+
+To restrict the app to the sending mailbox only (recommended):
+1. Go to **Enterprise applications → Harvey → Users and groups** and assign only the sending mailbox
+2. Under **Properties**, set **Assignment required?** to **Yes** (do this after step 1)
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Timed out waiting for the browser round-trip` | Check that nothing else is using port `8766`, and that the redirect URI is `http://localhost:8766` under *Mobile and desktop applications* (not *Web*) |
+| `AADSTS50011` (redirect URI mismatch) | The URI and its platform must match exactly as registered |
+| `Need admin approval` | See admin consent steps above |
+| `signed in as X, but persona.email is Y` | Run `harvey microsoft auth` again and pick the right account; use "Use another account" if the browser is already signed in as someone else |
+| `token refresh rejected` | Login expired (90 days unused) or was revoked — run `harvey microsoft auth` again |
+
+To revoke Harvey's access, go to [myaccount.microsoft.com](https://myaccount.microsoft.com) → **Apps**, or delete the app registration in Entra ID. Then delete `data/m365_token.json`.

@@ -1,0 +1,166 @@
+---
+title: "Codex Provider: Run Harvey on Your ChatGPT Subscription"
+sidebarTitle: "Codex"
+description: "Codex is Harvey's opt-in alternative brain for ChatGPT Plus, Pro, and Business plans — version-locked, fully isolated, no per-token billing, macOS and Linux only."
+---
+
+Codex is Harvey's opt-in brain for anyone who'd rather spend a ChatGPT plan (Plus, Pro, Business) instead of a Claude subscription. Like the Claude provider, there is no per-token API billing — model calls run against your plan. Claude is the default and needs no configuration change; switching to Codex is a deliberate opt-in.
+
+<Warning>
+  **Windows is not supported for the Codex provider.** Harvey refuses Codex calls on Windows before reading your login or starting anything. Use the [Claude provider](/providers/claude) on Windows.
+</Warning>
+
+## Prerequisites
+
+- A **ChatGPT plan with Codex access** (Plus, Pro, or Business)
+- **Codex CLI version `0.159.3` exactly** (see the version requirement below)
+- **Node.js** (required for the Codex npm package)
+- **macOS or Linux** — Windows is not supported
+
+## Installation
+
+<Steps>
+  <Step title="Install the exact Codex CLI version">
+    ```bash
+    npm install -g @openai/codex@0.159.3
+    ```
+
+    Harvey checks the Codex CLI version before every call. Any other version — including newer ones — is refused.
+  </Step>
+
+  <Step title="Log in with ChatGPT">
+    ```bash
+    codex login
+    ```
+
+    When prompted, choose **"Sign in with ChatGPT"**. Logging in with an API key is refused — Harvey only uses your ChatGPT subscription, never per-token API billing.
+  </Step>
+
+  <Step title="Configure Harvey to use Codex">
+    Add the following to `harvey.yaml` (or `harvey.local.yaml`):
+
+    ```yaml
+    brain:
+      provider: codex
+      model: gpt-5.5        # or a Luna, Sol, or Terra model ID
+      reasoning_effort: ""  # optional: minimal | low | medium | high | xhigh
+    ```
+  </Step>
+
+  <Step title="Run the preflight check">
+    ```bash
+    harvey status --check
+    ```
+
+    This runs the full Codex preflight — CLI version, isolation, login, model catalog, account type — without sending any prompt or spending quota.
+  </Step>
+</Steps>
+
+## harvey.yaml configuration
+
+```yaml
+brain:
+  provider: codex
+  model: gpt-5.5         # or an available Luna, Sol, or Terra model ID
+  reasoning_effort: ""   # optional: minimal | low | medium | high | xhigh
+```
+
+**`model`** — Set to an exact model ID from your account's catalog. `gpt-5.5` is the suggested default and is supported when present. Luna, Sol, and Terra model IDs (e.g. `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-5.6-terra`) are also supported. Leave blank to have Harvey pick the highest-priority listed model whose tools can be fully disabled. An explicit model is used exactly or the call fails.
+
+**`reasoning_effort`** — Optional. Controls the reasoning budget for models that support it.
+
+<Warning>
+  Harvey checks the Codex CLI version before every single call. **Only version `0.159.3` is accepted.** Newer versions are refused because a different Codex could expose tools that Harvey's lockdown doesn't know about. Support for a new version arrives with a Harvey update.
+
+  To install the verified version:
+  ```bash
+  npm install -g @openai/codex@0.159.3
+  ```
+</Warning>
+
+## Key behaviors
+
+<Accordion title="It's one or the other — no fallback to Claude">
+  Harvey uses exactly the provider configured in `brain.provider`. If a Codex call fails, the call fails — Harvey never silently falls back to Claude or to an API key. A machine running only Codex doesn't need Claude installed at all.
+</Accordion>
+
+<Accordion title="Your Codex setup is left completely alone">
+  Each call runs inside a private temporary home directory and an empty workspace. Your `~/.codex/config.toml`, MCP servers, plugins, hooks, skills, `AGENTS.md`, and memories are never loaded. Harvey's model choice never changes your own Codex default, and nothing from Harvey's calls appears in your own Codex history.
+</Accordion>
+
+<Accordion title="No tools — verified before every prompt">
+  Harvey's prompts contain untrusted text (prospect replies, scraped web pages), so the model must have nothing to act with. Before any prompt is sent, Harvey:
+
+  1. Starts Codex **without your login** and checks that its effective configuration matches the required lockdown.
+  2. Verifies the request route goes only to the built-in OpenAI provider and the default ChatGPT endpoint.
+  3. Installs your access-only login copy and restarts, re-attesting the config.
+  4. Starts a thread with no execution environments, no dynamic tools, no capability roots, empty base instructions, a read-only sandbox, and approval policy `never`.
+  5. Checks that every MCP server is disabled with no tools, and that no hooks are active.
+
+  During a turn, any attempted tool call, server request, approval request, or non-text output item immediately aborts the call and kills the runtime.
+</Accordion>
+
+<Accordion title="Your login only ever goes to OpenAI">
+  Before your login is placed into any runtime, Harvey starts Codex without credentials and confirms that requests would go to the built-in OpenAI provider and the default ChatGPT endpoint (`https://chatgpt.com/backend-api/`). Any custom provider, overridden built-in provider, custom base URL, telemetry exporter, or other endpoint configured in any Codex config layer (including `/etc/codex/config.toml` or a managed config) stops the call before your login is exposed.
+</Accordion>
+
+<Accordion title="Login handling and expiry">
+  Harvey reads your Codex file credential storage (`~/.codex/auth.json`, mode `600`) on every call — read-only, never writing or moving it. A private copy **without the refresh token** is given to the runtime and deleted after the call. This means:
+
+  - Codex cannot change or renew your real login.
+  - When the login expires or is due for Codex's routine renewal (after about 8 days), calls stop with: *"Your Codex login has expired or is due for renewal."*
+  - Fix: use Codex yourself once (it renews automatically), or run `codex login`. Harvey picks up the renewed login on its next call.
+  - Harvey never renews the login itself.
+
+  Keyring credential storage is not supported — only file storage (`cli_auth_credentials_store = "file"`, the default when no OS keyring is configured).
+</Accordion>
+
+<Accordion title="Supported models">
+  Set `brain.model` to an exact model ID from your account's catalog. Supported model families include:
+
+  - `gpt-5.5` — the suggested default, supported when present in your account's catalog
+  - Luna models (e.g. `gpt-5.6-luna`)
+  - Sol models (e.g. `gpt-6.1-sol`)
+  - Terra models (e.g. `gpt-5.6-terra`)
+
+  Harvey creates a private model catalog copy that preserves capabilities while forcing direct tool mode and removing experimental tools. A blank `brain.model` selects the highest-priority listed model that can run with no tools. Hidden models (visibility other than "list") require an explicit model ID. Availability depends on your ChatGPT account.
+</Accordion>
+
+<Accordion title="Quota and usage tracking">
+  Harvey reads your ChatGPT plan's real rate-limit windows from Codex for the limit bucket that applies to your model. The same `usage.max_daily_claude_percent` setting applies (the name predates Codex support):
+
+  ```yaml
+  usage:
+    max_daily_claude_percent: 80
+  ```
+
+  If Codex reports that usage is blocked, or a call fails on the plan's usage limit, Harvey treats the plan as full and stops Codex calls for an hour. If limits can't be read, the dashboard shows "Quota unavailable" and Harvey falls back to its own daily call budget. Codex calls are logged with tokens but no dollar cost — you're on a subscription.
+</Accordion>
+
+<Accordion title="When Codex can't be used, Harvey pauses cleanly">
+  Before each heartbeat, Harvey checks everything a call needs except the prompt itself: the Codex CLI version, the isolation lockdown, your login status, your ChatGPT account type, and whether the configured model can run with no tools. No prompt is sent.
+
+  If anything fails, the entire cycle is skipped: no reply is read or marked handled, nothing is drafted or sent. The log, `harvey status`, and the dashboard's Actions card show "Codex paused" and why.
+
+  If Codex stops working mid-cycle (e.g. the plan hits its usage limit), the reply being handled is left exactly as it was for a clean retry. Fix the cause and Harvey resumes on the next heartbeat. A renewed login or reinstalled CLI is noticed immediately; a usage-limit pause ends after an hour; other fixes are picked up within 30 minutes.
+</Accordion>
+
+<Accordion title="Overhead per call">
+  Each call checks the CLI version, starts Codex once without your login to verify its configuration, reads the model catalog, then starts it again to run the prompt. Each heartbeat's preflight check does the same without the prompt. This adds a few seconds per call. Within one heartbeat, a Brain's Codex calls run one at a time.
+</Accordion>
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `"Not logged in"` or `"expired or is due for renewal"` | Run `codex login` and sign in with ChatGPT, or use Codex once yourself (it auto-renews) |
+| `"Hasn't been verified with Harvey"` | Install the exact supported version: `npm install -g @openai/codex@0.159.3` |
+| `"Isolation could not be verified"` | A Codex config layer outside your `~/.codex` (e.g. `/etc/codex/config.toml` or a managed config) is forcing a tool, hook, MCP server, custom endpoint, or instructions back on. Remove it and try again |
+| Model catalog errors | Choose an available model ID from the catalog shown in the error message, or leave `brain.model` blank to auto-select |
+| `"Windows isn't supported"` | Use the [Claude provider](/providers/claude) on Windows |
+
+To re-verify the lockdown offline against your installed CLI, with no credentials or network:
+
+```bash
+HARVEY_CODEX_CLI_TESTS=1 pytest tests/test_codex_cli_surface.py
+```
